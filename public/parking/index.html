@@ -24,7 +24,7 @@ button{font-family:inherit;cursor:pointer}
 #timer svg{width:18px;height:18px}
 #stage{flex:1;position:relative;min-height:0;background:var(--bg)}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-#hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(10,17,31,.9);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);border-left:3px solid var(--acc);padding:9px 14px;border-radius:12px;font-size:14px;font-weight:700;width:max-content;max-width:90%;text-align:center;transition:opacity .6s;pointer-events:none;line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+#hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(10,17,31,.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--line);border-left:2px solid var(--acc);padding:5px 10px;border-radius:9px;font-size:11.5px;font-weight:600;color:#dbe4f0;width:max-content;max-width:78%;text-align:center;transition:opacity .6s;pointer-events:none;line-height:1.3;box-shadow:0 4px 12px rgba(0,0,0,.3)}
 #skip{position:absolute;right:12px;top:12px;background:rgba(10,17,31,.85);border:1px solid var(--line);color:#e2e8f0;border-radius:10px;padding:5px 14px;font-size:13px;font-weight:800;display:none}
 /* controls */
 #controls{flex:none;padding:8px 10px;padding-bottom:max(12px,env(safe-area-inset-bottom));padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right));background:var(--bg)}
@@ -899,7 +899,7 @@ const cv=$('c'),ctx=cv.getContext('2d'),stage=$('stage');
 let dpr=1,cw=375,ch=500,bg=null,marks=null,mctx=null,MS=1;
 let state='menu',lvl=0,L=null,P=null,solids=[],time=0,ltime=0,started=false,hold=0,flash=0,shake=0,wrongFace=false,parts=[],lastRear=null;
 let agents=[],peds=[],walkers=[],crashWhy='';
-let cam={x:200,y:350,s:1},introT=0;const HOLD=1.8,ZOOM=1.4;
+let cam={x:200,y:350,s:1},introT=0,skipFrom=null,skipT=0;
 const keys={left:false,right:false,gas:false,brake:false};
 
 function resize(){const r=stage.getBoundingClientRect();dpr=window.devicePixelRatio||1;cw=r.width;ch=r.height;
@@ -1001,17 +1001,25 @@ function startLevel(i,quick){clearTimeout(pendingT);lvl=i;L=LEVELS[i];
   time=0;started=false;hold=0;flash=0;shake=0;parts=[];lastRear=null;crashWhy='';updateGear();
   $('menu').style.display='none';$('ov').classList.remove('show');setCtl(true);$('timer').style.display='';$('bRestart').style.display='';$('bCar').style.display='none';$('carpick').classList.remove('show');
   {const ch=CHAPS[chapOf(i)];$('lvlName').innerHTML='<small>'+(chapOf(i)===2?'LETOVANJE · ':'')+'NIVO '+(i-ch.from+1)+' / '+(ch.to-ch.from)+'</small>'+L.name}$('tval').textContent='0.0';
-  if(L.big&&!quick){state='intro';introT=0;cam=overviewCam();$('skip').style.display='block';showHint('Ovo je mapa. Cilj je zeleno P mesto 🅿️',HOLD*1000+ZOOM*1000)}
-  else{state='play';$('skip').style.display='none';cam=L.big?followCam():smallCam();showHint(L.hint);setTimeout(()=>sfx.start(),60)}}
+  $('hint').style.opacity=0;
+  if(!quick){state='intro';introT=0;skipFrom=null;cam=overviewCam();$('skip').style.display='block'}
+  else{state='play';$('skip').style.display='none';cam=gameCam();showHint(L.hint);setTimeout(()=>sfx.start(),60)}}
 function overviewCam(){return {x:L.w/2,y:L.h/2,s:Math.min(cw/L.w,ch/L.h)}}
 function followCam(){const s=Math.min(cw/340,ch/520,2);let x=P.x+Math.cos(P.ang)*P.v*.45,y=P.y+Math.sin(P.ang)*P.v*.45;
   const hw=cw/(2*s),hh=ch/(2*s);x=L.w<=2*hw?L.w/2:clamp(x,hw,L.w-hw);y=L.h<=2*hh?L.h/2:clamp(y,hh,L.h-hh);return {x,y,s}}
 function smallCam(){const sf=Math.min(cw/L.w,ch/L.h),sc=Math.max(sf,Math.min(cw/L.w,ch/(0.72*L.h)));
   const hw=cw/(2*sc),hh=ch/(2*sc);let x=L.w/2,y=L.h/2;
   if(L.w>2*hw)x=clamp(P.x,hw,L.w-hw);if(L.h>2*hh)y=clamp(P.y+Math.sin(P.ang)*P.v*.35,hh,L.h-hh);return {x,y,s:sc}}
-function endIntro(){state='play';$('skip').style.display='none';showHint(L.hint,5000);sfx.start()}
-$('skip').addEventListener('pointerdown',e=>{e.stopPropagation();if(state==='intro'&&introT<HOLD)introT=HOLD});
-stage.addEventListener('pointerdown',()=>{if(state==='intro'&&introT<HOLD)introT=HOLD});
+// intro tour at the start of a level: whole map -> the parking spot -> whole map -> your car
+function gameCam(){return L.big?followCam():smallCam()}
+function easeCam(a,b,k){k=clamp(k,0,1);k=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;return {x:a.x+(b.x-a.x)*k,y:a.y+(b.y-a.y)*k,s:Math.exp(Math.log(a.s)+(Math.log(b.s)-Math.log(a.s))*k)}}
+function tourCam(t){const ov=overviewCam(),car=gameCam(),ss=car.s*1.25,hw=cw/(2*ss),hh=ch/(2*ss),sp={x:L.w<=2*hw?L.w/2:clamp(L.target.x,hw,L.w-hw),y:L.h<=2*hh?L.h/2:clamp(L.target.y,hh,L.h-hh),s:ss};
+  const seg=[[1.1,ov,ov],[1.0,ov,sp],[0.9,sp,sp],[0.9,sp,ov],[0.25,ov,ov],[1.0,ov,car]];let acc=0;
+  for(const q of seg){if(t<acc+q[0])return easeCam(q[1],q[2],(t-acc)/q[0]);acc+=q[0]}return null}
+function skipIntro(){if(state==='intro'&&!skipFrom){skipFrom={x:cam.x,y:cam.y,s:cam.s};skipT=0}}
+function endIntro(){state='play';skipFrom=null;$('skip').style.display='none';showHint(L.hint);sfx.start()}
+$('skip').addEventListener('pointerdown',e=>{e.stopPropagation();skipIntro()});
+stage.addEventListener('pointerdown',()=>skipIntro());
 
 function overlay(html){$('card').innerHTML=html;$('ov').classList.add('show')}
 function starHtml(n){let s='';for(let i=0;i<3;i++)s+='<span class="'+(i<n?'':'off')+'" style="animation-delay:'+(0.15+i*0.15)+'s">★</span>';return s}
@@ -1362,10 +1370,10 @@ function update(dt){
   if(!L)return;
   if(state==='intro'||state==='play'||state==='won'){ltime+=dt;updateTraffic(dt);updatePeds(dt);updateWalkers(dt)}
   // camera
-  if(L.big){if(state==='intro'){introT+=dt;const ov=overviewCam(),tg=followCam();
-      if(introT<HOLD)cam=ov;else{let k=Math.min(1,(introT-HOLD)/ZOOM);k=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
-        cam={x:ov.x+(tg.x-ov.x)*k,y:ov.y+(tg.y-ov.y)*k,s:Math.exp(Math.log(ov.s)+(Math.log(tg.s)-Math.log(ov.s))*k)};if(k>=1)endIntro()}}
-    else if(state!=='menu'){const tg=followCam(),f=Math.min(1,dt*5);cam.x+=(tg.x-cam.x)*f;cam.y+=(tg.y-cam.y)*f;cam.s+=(tg.s-cam.s)*f}}
+  if(state==='intro'){introT+=dt;
+    if(skipFrom){skipT+=dt;cam=easeCam(skipFrom,gameCam(),skipT/.5);if(skipT>=.5){cam=gameCam();endIntro()}}
+    else{const c=tourCam(introT);if(c)cam=c;else{cam=gameCam();endIntro()}}}
+  else if(L.big){if(state!=='menu'){const tg=followCam(),f=Math.min(1,dt*5);cam.x+=(tg.x-cam.x)*f;cam.y+=(tg.y-cam.y)*f;cam.s+=(tg.s-cam.s)*f}}
   else if(state!=='menu'){const tg=smallCam(),f=Math.min(1,dt*4);if(Math.abs(tg.s-cam.s)>.001&&Math.abs(cam.s-tg.s)/tg.s>.3){cam=tg}else{cam.x+=(tg.x-cam.x)*f;cam.y+=(tg.y-cam.y)*f;cam.s+=(tg.s-cam.s)*f}}
   if(state!=='play'){soundFrame(dt,false);return}
   if(!started&&(keys.gas||keys.left||keys.right))started=true;
@@ -1442,7 +1450,7 @@ function draw(now){
   if(L.face!=null){ctx.rotate(L.face);ctx.fillStyle='rgba(255,255,255,'+(.6+.3*pulse)+')';ctx.beginPath();ctx.moveTo(19,0);ctx.lineTo(4,-10);ctx.lineTo(4,-4);ctx.lineTo(-15,-4);ctx.lineTo(-15,4);ctx.lineTo(4,4);ctx.lineTo(4,10);ctx.closePath();ctx.fill()}
   else{ctx.fillStyle='#2563eb';rr(ctx,-11,-11,22,22,5);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.6;ctx.stroke();ctx.fillStyle='#fff';ctx.font='800 17px Montserrat,system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('P',0,1.5)}
   ctx.restore();
-  if(L.big){const r=(state==='intro'?22:14)+4*pulse;ctx.strokeStyle='rgba(74,222,128,'+(.5+.4*pulse)+')';ctx.lineWidth=state==='intro'?5:3;ctx.beginPath();ctx.arc(t.x,t.y,t.hw+r,0,7);ctx.stroke()}
+  if(L.big||state==='intro'){const r=(state==='intro'?22:14)+4*pulse;ctx.strokeStyle='rgba(74,222,128,'+(.5+.4*pulse)+')';ctx.lineWidth=state==='intro'?5:3;ctx.beginPath();ctx.arc(t.x,t.y,t.hw+r,0,7);ctx.stroke()}
   for(const f of L.fountains){const wg=ctx.createRadialGradient(f.x,f.y,2,f.x,f.y,f.r);wg.addColorStop(0,'#e0f2fe');wg.addColorStop(1,'#0ea5e9');ctx.fillStyle=wg;ctx.beginPath();ctx.arc(f.x,f.y,f.r-3,0,7);ctx.fill();
     for(let k=0;k<3;k++){const ph=((now/1400)+k/3)%1;ctx.strokeStyle='rgba(255,255,255,'+(.6*(1-ph))+')';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(f.x,f.y,8+ph*(f.r-12),0,7);ctx.stroke()}
     for(let k=0;k<16;k++){const a=k*PI/8+now/2000,r2=6+((now/300+k*1.7)%1)*14;ctx.fillStyle='rgba(255,255,255,.85)';ctx.beginPath();ctx.arc(f.x+Math.cos(a)*r2,f.y+Math.sin(a)*r2,1.4,0,7);ctx.fill()}
