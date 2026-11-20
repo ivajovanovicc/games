@@ -199,7 +199,7 @@ function loopPath(x0,y0,x1,y1,r,speed,count,ci,ccw){const pts=[];
 function City(w,h){return {w,h,walls:[],deco:[],gates:[],heads:[],signals:[],crossings:[],walkers:[],movers:[],cars:[],lines:[],cones:[]}}
 function blk(C,x0,y0,x1,y1,kind,label,color){C.walls.push(wall(x0,y0,x1,y1));C.deco.push(['blk',x0,y0,x1,y1,kind,label||'',color||'#64748b'])}
 function sidewalkWall(C,x0,y0,x1,y1){C.walls.push(wall(x0,y0,x1,y1));C.deco.push(['sidewalk',x0,y0,x1,y1])}
-function crossing(C,a,b,sig,n){const cr={a,b,sig:sig||null,n:n||2};C.crossings.push(cr);
+function crossing(C,a,b,sig,n){const cr={a,b,sig:sig||null,n:n||2};C.crossings.push(cr);C._lastCr=cr;
   const x0=Math.min(a[0],b[0]),x1=Math.max(a[0],b[0]),y0=Math.min(a[1],b[1]),y1=Math.max(a[1],b[1]);
   if(x1-x0>y1-y0)C.deco.push(['zebra',x0+SW-6,y0-12,x1-SW+6,y1+12]);else C.deco.push(['zebra',x0-12,y0+SW-6,x1+12,y1-SW+6]);}
 // 4-way signalised intersection; vertical road x cx±40, horizontal road y cy±40
@@ -207,8 +207,7 @@ function intersection(C,cx,cy,A,B,np){np=np==null?2:np;
   C.gates.push({x:cx+20,y:cy+70,ang:-PI/2,w:20,sig:A},{x:cx-20,y:cy-70,ang:PI/2,w:20,sig:A},{x:cx+70,y:cy-20,ang:PI,w:20,sig:B},{x:cx-70,y:cy+20,ang:0,w:20,sig:B});
   C.heads.push({x:cx+48,y:cy+80,ang:-PI/2,sig:A},{x:cx-48,y:cy-80,ang:PI/2,sig:A},{x:cx+80,y:cy-48,ang:PI,sig:B},{x:cx-80,y:cy+48,ang:0,sig:B});
   C.lines.push([cx,cy+70,cx+40,cy+70,'S'],[cx-40,cy-70,cx,cy-70,'S'],[cx+70,cy-40,cx+70,cy,'S'],[cx-70,cy,cx-70,cy+40,'S']);
-  crossing(C,[cx-48,cy+54],[cx+48,cy+54],A,np);crossing(C,[cx-48,cy-54],[cx+48,cy-54],A,np);
-  crossing(C,[cx+54,cy-48],[cx+54,cy+48],B,np);crossing(C,[cx-54,cy-48],[cx-54,cy+48],B,np);}
+  [[[cx-48,cy+54],[cx+48,cy+54],A],[[cx-48,cy-54],[cx+48,cy-54],A],[[cx+54,cy-48],[cx+54,cy+48],B],[[cx-54,cy-48],[cx-54,cy+48],B]].forEach(q=>{crossing(C,q[0],q[1],q[2],np);C._lastCr.box=[cx,cy]})}
 function dashV(C,x,segs){segs.forEach(s=>C.lines.push([x,s[0],x,s[1],true]))}
 function dashH(C,y,segs){segs.forEach(s=>C.lines.push([s[0],y,s[1],y,true]))}
 const SIG=(id,g0)=>({id,g0,g:8,y:2,T:24});
@@ -582,7 +581,7 @@ function c2Beach(){const cars=[],deco=[['sea',0,0,600,140,'S'],['sand',0,140,600
   let ci=0;const T=['car','camper','cabrio','car','van'];
   for(let k=0;k<9;k++){const x=60+k*60;cars.push(veh(x,395,k%2?PI/2:-PI/2,ci,T[ci++%5]));if(x!==300)cars.push(veh(x,610,-PI/2,ci,T[ci++%5]));cars.push(veh(x,700,PI/2,ci,T[ci++%5]))}
   for(let x=60;x<600;x+=110)deco.push(['palm',x,780,14]);
-  return {name:'Plaža',hint:'Plaža je puna! Uđi U RIKVERC u slobodno mesto u srednjem redu (prednji deo ka prolazu).',w:600,h:800,ground:'#cdb98a',start:{x:60,y:505,ang:0},target:{x:300,y:610,hw:36,hh:24,ang:PI/2},face:-PI/2,
+  return {name:'Plaža',hint:'Plaža je puna! Uđi U RIKVERC u slobodno mesto u srednjem redu (prednji deo ka prolazu).',w:600,h:800,ground:'#cdb98a',start:{x:140,y:505,ang:0},target:{x:300,y:610,hw:36,hh:24,ang:PI/2},face:-PI/2,
     walls:[wwall(0,0,600,140),wall(0,330,250,340),wall(350,330,600,340),wall(0,760,600,800)],cars,lines:[],par:[25,45],
     movers:[loopPath(30,470,570,540,30,40,1,4,true)],walkers:[[[20,200],[580,240]],[[560,300],[40,180]],[[100,150],[500,160]]],deco}}
 function c2Marina(){const cars=[],lines=[];let ci=0;
@@ -905,7 +904,8 @@ function resize(){const r=stage.getBoundingClientRect();dpr=window.devicePixelRa
   cv.width=Math.round(cw*dpr);cv.height=Math.round(ch*dpr)}
 window.addEventListener('resize',()=>{resize();if(state==='menu')drawHero()});
 
-function showMenu(){clearTimeout(pendingT);state='menu';$('menu').style.display='block';$('ov').classList.remove('show');$('lvlName').innerHTML='<span class="lg">//</span>Parking <em>majstor</em>';$('timer').style.display='none';$('bRestart').style.display='none';$('bCar').style.display='';setTimeout(drawHero,30);$('hint').style.opacity=0;$('skip').style.display='none';buildMenu()}
+function setCtl(on){const c=$('controls');const v=on?'':'none';if(c.style.display!==v){c.style.display=v;requestAnimationFrame(resize)}}
+function showMenu(){clearTimeout(pendingT);state='menu';setCtl(false);$('menu').style.display='block';$('ov').classList.remove('show');$('lvlName').innerHTML='<span class="lg">//</span>Parking <em>majstor</em>';$('timer').style.display='none';$('bRestart').style.display='none';$('bCar').style.display='';setTimeout(drawHero,30);$('hint').style.opacity=0;$('skip').style.display='none';buildMenu()}
 
 let hintTimer=null;
 function showHint(t,ms){const h=$('hint');h.textContent=t;h.style.opacity=1;clearTimeout(hintTimer);hintTimer=setTimeout(()=>h.style.opacity=0,ms||4500)}
@@ -932,7 +932,12 @@ function initTraffic(){agents=[];
   L.movers.forEach(m0=>{const m=prepMover(m0);for(let i=0;i<m.count;i++){const d=((m.phase+i*m.len/m.count)%m.len+m.len)%m.len;
     const MIX=['car','cabrio','car','van','camper','scooter','cabrio','car'];const ty=m.type||(L.theme==='summer'?MIX[(m.ci*3+i*5)%MIX.length]:'car');const pal=L.theme==='summer'?SUMCOL:COLORS;
     const a={m,d,v:m.speed*(ty==='camper'?.8:1),type:ty,hw:VT[ty][0],hh:VT[ty][1],color:pal[(m.ci+i*4)%pal.length],brk:false};Object.assign(a,posAt(m,d));agents.push(a)}});
-  for(const a of agents){let k=0;while(k++<12&&Math.hypot(a.x-L.start.x,a.y-L.start.y)<110){a.d+=60;if(!a.m.closed&&a.d>a.m.len)a.d-=a.m.len;Object.assign(a,posAt(a.m,a.d))}}
+  const ms=[...new Set(agents.map(a=>a.m))],conf=[];ms.forEach(m=>m.conf=[]);
+  for(let i=0;i<ms.length;i++)for(let j=i+1;j<ms.length;j++)for(const p1 of ms[i].segs)for(const p2 of ms[j].segs){const ax=p1.ux*p1.l,ay=p1.uy*p1.l,bx=p2.ux*p2.l,by=p2.uy*p2.l,den=ax*by-ay*bx;if(Math.abs(den)<1e-6)continue;
+    const qx=p2.a[0]-p1.a[0],qy=p2.a[1]-p1.a[1],t=(qx*by-qy*bx)/den,u=(qx*ay-qy*ax)/den;if(t>=0&&t<=1&&u>=0&&u<=1){const pt=[p1.a[0]+ax*t,p1.a[1]+ay*t];conf.push(pt);ms[i].conf.push({d:p1.s+p1.l*t,pt});ms[j].conf.push({d:p2.s+p2.l*u,pt})}}
+  ms.forEach(m=>{m.conf.sort((p,q)=>p.d-q.d);m.cl=[];for(const c of m.conf){const last=m.cl[m.cl.length-1];if(last&&c.d-last.d1<70){last.d1=c.d;last.pts.push(c.pt)}else m.cl.push({d0:c.d,d1:c.d,pts:[c.pt]})}});
+  const placed=[];for(const a of agents){let k=0;const bad=()=>conf.some(c=>Math.hypot(a.x-c[0],a.y-c[1])<a.hw+60)||Math.hypot(a.x-L.start.x,a.y-L.start.y)<110||overlap({x:L.start.x,y:L.start.y,hw:40,hh:30,ang:L.start.ang},{x:a.x,y:a.y,hw:a.hw+6,hh:a.hh+4,ang:a.ang})||placed.some(o=>overlap({x:a.x,y:a.y,hw:a.hw+14,hh:a.hh+8,ang:a.ang},{x:o.x,y:o.y,hw:o.hw+14,hh:o.hh+8,ang:o.ang}));
+    while(k++<120&&bad()){a.d+=25;if(a.d>a.m.len)a.d-=a.m.len;Object.assign(a,posAt(a.m,a.d))}placed.push(a)}
   peds=[];const PC=['#ef4444','#3b82f6','#f59e0b','#10b981','#a855f7','#ec4899','#f97316','#14b8a6','#eab308'],HC=['#1f2937','#78350f','#fbbf24','#111827','#9ca3af'];
   let k=0;L.crossings.forEach(cr=>{const dx=cr.b[0]-cr.a[0],dy=cr.b[1]-cr.a[1],len=Math.hypot(dx,dy);cr.len=len;cr.ux=dx/len;cr.uy=dy/len;
     for(let i=0;i<cr.n;i++){const atB=i%2===1;peds.push({cr,s:atB?len:0,dir:atB?-1:1,state:'wait',timer:1+((k*1.7)%5),lat:-7+((k*5)%15),speed:20+(k*3)%9,c:PC[k%PC.length],h:HC[k%HC.length],ph:k,x:0,y:0,ang:0});k++}});
@@ -942,9 +947,10 @@ function pedBox(p){return {x:p.x,y:p.y,hw:5,hh:5,ang:0}}
 function updatePeds(dt){
   for(const p of peds){const cr=p.cr;
     if(p.state==='wait'){p.timer-=dt;
-      if(p.timer<=0){let ok;if(cr.sig)ok=sigState(cr.sig)==='R'&&sigRedLeft(cr.sig)>3.5;
+      if(p.timer<=0){let ok;if(cr.sig){ok=sigState(cr.sig)==='R'&&sigRedLeft(cr.sig)>3.5;if(ok&&cr.box){const mx=(cr.a[0]+cr.b[0])/2,my=(cr.a[1]+cr.b[1])/2;for(const a of agents){if(a.dormant)continue;if(Math.abs(a.x-cr.box[0])<48&&Math.abs(a.y-cr.box[1])<48&&Math.cos(a.ang)*(mx-a.x)+Math.sin(a.ang)*(my-a.y)>0){ok=false;break}}}}
         else{ok=true;if(P){const mx=(cr.a[0]+cr.b[0])/2,my=(cr.a[1]+cr.b[1])/2;const dd=Math.abs((P.x-mx)*cr.uy-(P.y-my)*cr.ux);const along=Math.abs((P.x-mx)*cr.ux+(P.y-my)*cr.uy);if(dd<85&&along<cr.len/2+20&&Math.abs(P.v)>12)ok=false}
           for(const a of agents){const dd=Math.hypot(a.x-(cr.a[0]+cr.b[0])/2,a.y-(cr.a[1]+cr.b[1])/2);if(dd<70&&a.v>30)ok=false}}
+        if(ok){const cw={x:(cr.a[0]+cr.b[0])/2,y:(cr.a[1]+cr.b[1])/2,hw:cr.len/2,hh:12,ang:Math.atan2(cr.uy,cr.ux)};for(const a of agents){if(!a.dormant&&overlap(cw,{x:a.x,y:a.y,hw:a.hw+3,hh:a.hh+3,ang:a.ang})){ok=false;break}}}
         if(ok){p.state='walk'}else p.timer=.5}}
     else{const ns=p.s+p.dir*p.speed*dt;const nx=cr.a[0]+cr.ux*ns-cr.uy*p.lat+cr.ux*p.dir*7,ny=cr.a[1]+cr.uy*ns+cr.ux*p.lat+cr.uy*p.dir*7;
       let blocked=false;if(P&&overlap({x:nx,y:ny,hw:5,hh:5,ang:0},{x:P.x,y:P.y,hw:24,hh:13,ang:P.ang}))blocked=true;
@@ -953,19 +959,34 @@ function updatePeds(dt){
     p.x=cr.a[0]+cr.ux*p.s-cr.uy*p.lat;p.y=cr.a[1]+cr.uy*p.s+cr.ux*p.lat;p.ang=Math.atan2(cr.uy*p.dir,cr.ux*p.dir);p.moving=p.state==='walk'}}
 function updateWalkers(dt){for(const w of walkers){w.s+=w.dir*w.speed*dt;if(w.s<0){w.s=0;w.dir=1}if(w.s>w.len){w.s=w.len;w.dir=-1}w.ph+=dt*8;
   w.x=w.a[0]+w.ux*w.s;w.y=w.a[1]+w.uy*w.s;w.ang=Math.atan2(w.uy*w.dir,w.ux*w.dir);w.moving=true}}
+function blockChk(a,x,y,ox,oy,oang,ohw,ohh,margin,range,why,ref,st){const dx=Math.cos(a.ang),dy=Math.sin(a.ang),rx=x-a.x,ry=y-a.y,ah=rx*dx+ry*dy;if(ah<=0||ah>range)return;
+  const c=Math.abs(Math.cos(oang-a.ang)),s=Math.abs(Math.sin(oang-a.ang)),ex=ohw*s+ohh*c,el=ohw*c+ohh*s,lt=Math.abs(-rx*dy+ry*dx);
+  if(lt<a.hh+ex+3){const g=a.d+ah-el-a.hw-margin;if(g<st.lim){st.lim=g;a.why=why;a.blk=ref}}}
 function updateTraffic(dt){
-  for(const a of agents){const m=a.m;let lim=1e9;const front=a.d+a.hw;
-    for(const s of m.stops){if(front<=s.d+3){const st=sigState(s.sig);if(st==='R'||(st==='Y'&&s.d-front>14))lim=Math.min(lim,s.d-a.hw-2)}}
+  for(const a of agents){const m=a.m;const st={lim:1e9};a.why='';a.blk=null;const front=a.d+a.hw;
+    for(const s of m.stops){if(front<=s.d+3){const sg=sigState(s.sig);if((sg==='R'||(sg==='Y'&&s.d-front>14))&&s.d-a.hw-2<st.lim){st.lim=s.d-a.hw-2;a.why='sig'}}}
     for(const c of m.cross){if(front<=c.d+4&&c.d-front<120){for(const p of peds){if(p.cr!==c.cr)continue;
-      const off=(p.x-c.px)*c.cr.ux+(p.y-c.py)*c.cr.uy;if(Math.abs(off)<34&&(p.state==='walk'||(p.s>4&&p.s<c.cr.len-4))){lim=Math.min(lim,c.d-14-a.hw);break}}}}
-    const dx=Math.cos(a.ang),dy=Math.sin(a.ang);
-    const chk=(x,y,thr,gap,range)=>{const rx=x-a.x,ry=y-a.y,ah=rx*dx+ry*dy;if(ah<=0||ah>range)return;const lt=Math.abs(-rx*dy+ry*dx);if(lt<thr)lim=Math.min(lim,a.d+ah-gap)};
-    for(const o of agents)if(o!==a)chk(o.x,o.y,a.hh+o.hh+2,a.hw+o.hw+8,150);
-    if(P&&state!=='crashed')chk(P.x,P.y,a.hh+21,a.hw+30,150);
-    for(const p of peds)chk(p.x,p.y,18,26,90);
+      const off=(p.x-c.px)*c.cr.ux+(p.y-c.py)*c.cr.uy;if(Math.abs(off)<34&&(p.state==='walk'||(p.s>4&&p.s<c.cr.len-4))){if(c.d-14-a.hw<st.lim){st.lim=c.d-14-a.hw;a.why='ped'}break}}}}
+    if(a.dormant)continue;
+    for(const o of agents)if(o!==a&&!o.dormant&&!(a.ghost>0&&o===a.ghostOf))blockChk(a,o.x,o.y,o.x,o.y,o.ang,o.hw,o.hh,6,170,'car',o,st);
+    if(P&&state!=='crashed')blockChk(a,P.x,P.y,P.x,P.y,P.ang,22,11,8,170,'player',null,st);
+    for(const p of peds)blockChk(a,p.x,p.y,p.x,p.y,0,5,5,10,90,'ped',null,st);
+    for(const cl of (m.cl||[])){if(front>cl.d1+14)continue;if(front>cl.d0-12)break;if(cl.d0-front>90)break;
+      const ent=cl.d0-22-a.hw-6;if(ent>=st.lim)break;
+      const sq=pt=>({x:pt[0],y:pt[1],hw:16,hh:16,ang:0});
+      let occ=cl.pts.some(pt=>agents.some(o=>o!==a&&!o.dormant&&overlap({x:o.x,y:o.y,hw:o.hw+4,hh:o.hh+4,ang:o.ang},sq(pt)))||(P&&state!=='crashed'&&overlap({x:P.x,y:P.y,hw:26,hh:15,ang:P.ang},sq(pt))));
+      if(!occ&&st.lim<cl.d1+14+a.hw+4&&a.why!=='sig')occ=true;
+      if(occ){st.lim=ent;a.why='zone'}break}
+    a.lim=st.lim}
+  // deadlock breaker: a cycle of cars waiting on each other -> let one of them through
+  for(const a of agents){if(a.ghost>0)a.ghost-=dt;
+    if(a.v<1&&a.why==='car'){a.stuckT=(a.stuckT||0)+dt;if(a.stuckT>2){let b=a.blk,k=0;while(b&&b!==a&&b.why==='car'&&k++<40)b=b.blk;if(b===a){const cyc=[a];let c=a.blk;while(c&&c!==a){cyc.push(c);c=c.blk}if(!cyc.some(q=>q.ghost>0)){const w=cyc.reduce((x,y)=>agents.indexOf(x)<agents.indexOf(y)?x:y);w.ghost=1.6;w.ghostOf=w.blk;w.stuckT=0}}}}else a.stuckT=0}
+  for(const a of agents){const m=a.m;
+    if(a.dormant){const sp=posAt(m,0);if(!agents.some(o=>o!==a&&!o.dormant&&Math.cos(o.ang-sp.ang)>.7&&Math.hypot(o.x-sp.x,o.y-sp.y)<a.hw+o.hw+30)){a.dormant=false;a.d=0;a.v=m.speed*.6;Object.assign(a,posAt(m,0))}continue}
+    let lim=a.lim;
     const vt=clamp((lim-a.d)*2.2,0,m.speed*(a.type==='camper'?.8:1));a.brk=vt<a.v-5;
     a.v=vt>a.v?Math.min(vt,a.v+90*dt):Math.max(vt,a.v-380*dt);a.d+=a.v*dt;
-    if(!m.closed&&a.d>=m.len){const busy=agents.some(o=>o!==a&&o.m===m&&o.d<70);a.d=busy?m.len:0}
+    if(!m.closed&&a.d>=m.len){const sp=posAt(m,0);const busy=agents.some(o=>o!==a&&!o.dormant&&Math.cos(o.ang-sp.ang)>.7&&Math.hypot(o.x-sp.x,o.y-sp.y)<a.hw+o.hw+30);if(busy){a.d=m.len;a.dormant=true}else a.d=0}
     Object.assign(a,posAt(m,a.d))}}
 
 let pendingT=null;
@@ -976,7 +997,7 @@ function startLevel(i,quick){clearTimeout(pendingT);lvl=i;L=LEVELS[i];
   ltime=0;initTraffic();
   bg=buildBg(L);MS=L.big?1:2.5;marks=document.createElement('canvas');marks.width=Math.round(L.w*MS);marks.height=Math.round(L.h*MS);mctx=marks.getContext('2d');mctx.scale(MS,MS);
   time=0;started=false;hold=0;flash=0;shake=0;parts=[];lastRear=null;crashWhy='';updateGear();
-  $('menu').style.display='none';$('ov').classList.remove('show');$('timer').style.display='';$('bRestart').style.display='';$('bCar').style.display='none';$('carpick').classList.remove('show');
+  $('menu').style.display='none';$('ov').classList.remove('show');setCtl(true);$('timer').style.display='';$('bRestart').style.display='';$('bCar').style.display='none';$('carpick').classList.remove('show');
   {const ch=CHAPS[chapOf(i)];$('lvlName').innerHTML='<small>'+(chapOf(i)===2?'LETOVANJE · ':'')+'NIVO '+(i-ch.from+1)+' / '+(ch.to-ch.from)+'</small>'+L.name}$('tval').textContent='0.0';
   if(L.big&&!quick){state='intro';introT=0;cam=overviewCam();$('skip').style.display='block';showHint('Ovo je mapa. Cilj je zeleno P mesto 🅿️',HOLD*1000+ZOOM*1000)}
   else{state='play';$('skip').style.display='none';cam=L.big?followCam():overviewCam();showHint(L.hint);setTimeout(()=>sfx.start(),60)}}
@@ -1008,7 +1029,8 @@ function win(){state='won';const t=time;const n=t<=L.par[0]?3:t<=L.par[1]?2:1;
 const WHY={sea:['🌊','Pljus!','Auto je završio u moru. Pažljivo kod obale!'],wall:['💥','Ups, sudar!','Auto je udario u prepreku.'],car:['💥','Ups, sudar!','Udario te je auto. Sačekaj da prođe!'],
   rear:['💥','Ups, sudar!','Udario si u auto ispred sebe. Drži razmak!'],ped:['🚶','Pazi na pešake!','Udario si pešaka. Uvek ih propusti.'],red:['🚦','Crveno svetlo!','Prošao si kroz crveno. Sačekaj zeleno.']};
 function vib(p){try{if(navigator.vibrate)navigator.vibrate(p)}catch(e){}}
-function crash(why){state='crashed';crashWhy=why;flash=1;vib(why==='red'?[80,60,80]:[220,60,120]);
+let TESTNC=false;
+function crash(why){if(TESTNC)return;state='crashed';crashWhy=why;flash=1;vib(why==='red'?[80,60,80]:[220,60,120]);
   if(why==='red'){sfx.whistle()}else{shake=.45;sfx.crash();if(why==='car'||why==='rear')sfx.horn();smoke(P.x+Math.cos(P.ang)*Math.sign(P.v||1)*20,P.y+Math.sin(P.ang)*Math.sign(P.v||1)*20)}
   P.v=0;
   pendingT=setTimeout(()=>{const w=WHY[why];overlay('<div class="em">'+w[0]+'</div><h2>'+w[1]+'</h2><p>'+w[2]+'</p><div class="btns"><button class="pri" id="oRetry">Pokušaj ponovo</button><button id="oMenu">Meni</button></div>');
@@ -1225,11 +1247,11 @@ const MID2=[
    palmSide(g,w*.1,h*.74,1,t);palmSide(g,w*.92,h*.76,.8,t);guy(g,w*.4,h*.86,.9,{t,shades:1,shirt:'#3b82f6',big:1});mom(g,w*.56,h*.86,.9,t);dog(g,w*.7,h*.88,.8,t);
    for(let i=0;i<4;i++){const y=h*.6-((t*30+i*40)%140);heart(g,w*.48+i*16+Math.sin(t*2+i)*6,y,.9,'#fb7185')}gull(g,w*.3,h*.25,1.3);gull(g,w*.7,h*.2,1)}}];
 
-function playStory(scenes,onEnd){story={scenes,i:0,t:0,onEnd};const el=document.getElementById('story');el.style.display='block';
+function playStory(scenes,onEnd){setCtl(false);story={scenes,i:0,t:0,onEnd};const el=document.getElementById('story');el.style.display='block';
   const r=el.getBoundingClientRect();SC.width=Math.round(r.width*dpr);SC.height=Math.round(r.height*dpr);showScene()}
 function showScene(){const s=story.scenes[story.i];document.getElementById('cap').innerHTML=s.text;document.getElementById('snext').textContent=s.btn||'Dalje ▶';story.t=0;
   document.getElementById('dots').innerHTML=story.scenes.map((_,i)=>'<i class="'+(i===story.i?'on':'')+'"></i>').join('')}
-function endStory(){document.getElementById('story').style.display='none';const f=story&&story.onEnd;story=null;if(f)f()}
+function endStory(){document.getElementById('story').style.display='none';const f=story&&story.onEnd;story=null;setCtl(state!=='menu');if(f)f()}
 document.getElementById('snext').onclick=()=>{if(!story)return;story.i++;if(story.i>=story.scenes.length)endStory();else showScene()};
 document.getElementById('sskip').onclick=()=>endStory();
 function drawStory(dt){story.t+=dt;const r=SC.getBoundingClientRect();const w=r.width,h=r.height;if(SC.width!==Math.round(w*dpr)){SC.width=Math.round(w*dpr);SC.height=Math.round(h*dpr)}
@@ -1361,7 +1383,7 @@ function update(dt){
   lastRear=rear;soundFrame(dt,skid);
   const box={x:P.x,y:P.y,hw:21,hh:10.5,ang:P.ang};
   for(const o of solids)if(overlap(box,o)){crash(o.water?'sea':'wall');return}
-  for(const o of agents)if(overlap(box,{x:o.x,y:o.y,hw:o.hw-1,hh:o.hh-.5,ang:o.ang})){const ah=((o.x-P.x)*c+(o.y-P.y)*s)*Math.sign(P.v||1);crash(ah>8&&Math.abs(P.v)>5?'rear':'car');return}
+  for(const o of agents)if(!o.dormant&&overlap(box,{x:o.x,y:o.y,hw:o.hw-1,hh:o.hh-.5,ang:o.ang})){const ah=((o.x-P.x)*c+(o.y-P.y)*s)*Math.sign(P.v||1);crash(ah>8&&Math.abs(P.v)>5?'rear':'car');return}
   if(Math.abs(P.v)>3)for(const p of peds)if(overlap(box,pedBox(p))){crash('ped');return}
   for(const g of L.gates){const gx=Math.cos(g.ang),gy=Math.sin(g.ang),dx=P.x-g.x,dy=P.y-g.y,al=dx*gx+dy*gy,lt=Math.abs(-dx*gy+dy*gx);
     const pv=g.prev;g.prev=al;if(pv!==undefined&&pv<0&&al>=0&&lt<g.w+8&&P.v>0&&c*gx+s*gy>.5&&sigState(g.sig)==='R'){crash('red');return}}
@@ -1425,7 +1447,7 @@ function draw(now){
       if(hz){const yy=y0+off;for(let x=x0;x<=x1;x+=8)ctx.lineTo(x,yy+Math.sin(x/22+now/700+k)*2.5)}else{const xx=x0+off;for(let y=y0;y<=y1;y+=8)ctx.lineTo(xx+Math.sin(y/22+now/700+k)*2.5,y)}ctx.stroke()}ctx.globalAlpha=1;ctx.restore()}
   for(const w of walkers)drawPed(w);
   for(const p of peds)drawPed(p);
-  for(const o of agents)drawVehicle(ctx,o,o.color,{lit:true,brake:o.brk||o.v<2});
+  for(const o of agents)if(!o.dormant)drawVehicle(ctx,o,o.color,{lit:true,brake:o.brk||o.v<2});
   if(P){drawCar(ctx,{x:P.x,y:P.y,hw:22,hh:11,ang:P.ang},carColor,{player:true,lit:true,steer:P.steer,brake:keys.brake||(state==='play'&&Math.abs(P.v)<1),rev:P.gear==='R'});if(L.theme==='summer')roofBox(ctx,{x:P.x,y:P.y,ang:P.ang});
     if(hornT>0){const k=1-hornT/.6;for(let q=0;q<2;q++){const kk=(k+q*.35)%1;ctx.strokeStyle='rgba(255,255,255,'+(.55*(1-kk))+')';ctx.lineWidth=2;ctx.beginPath();ctx.arc(P.x+Math.cos(P.ang)*24,P.y+Math.sin(P.ang)*24,8+kk*26,P.ang-.7,P.ang+.7);ctx.stroke()}}
     if(state==='intro'){ctx.strokeStyle='rgba(255,255,255,'+(.5+.4*pulse)+')';ctx.lineWidth=4;ctx.beginPath();ctx.arc(P.x,P.y,34+4*pulse,0,7);ctx.stroke()}
@@ -1459,7 +1481,14 @@ resize();showMenu();requestAnimationFrame(frame);
 let seen=false;try{seen=localStorage.getItem('pm_intro')==='1'}catch(e){}
 if(!seen)setTimeout(()=>playStory(INTRO,()=>{try{localStorage.setItem('pm_intro','1')}catch(e){}}),300);
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(L&&state!=='menu')bg=buildBg(L)});
-window.__pm={ending:()=>playStory(ENDING,showMenu),startLevel:(i,q)=>startLevel(i,q),get:()=>({state,P,agents,peds,ltime,lvl,cam,L,time,crashWhy})};
+window.__pm={ff2:(sec)=>{TESTNC=true;const st={ov:0,maxStuck:0,pairs:[]};const n=Math.round(sec*30);let R=rng(5);
+  for(let k=0;k<n;k++){if(k%1800===0){if((k/1800)%2===0&&agents.length){const a=agents[Math.floor(R()*agents.length)];P.x=a.x+Math.cos(a.ang)*70;P.y=a.y+Math.sin(a.ang)*70;P.ang=a.ang+(R()<.5?PI/2:0);P.v=0}else{P.x=-900;P.y=-900}}
+    P.v=0;update(1/30);state='play';for(const a of agents){if(!a.dormant&&a.v<1){a.stopT=(a.stopT||0)+1/30;if(P.x>-500)a.stopT=Math.min(a.stopT,0);a.maxStop=Math.max(a.maxStop||0,a.stopT)}else a.stopT=0}
+    for(const a of agents){let b=a.blk,q=0;const seen=new Set([a]);let cyc=false;while(b&&b.why==='car'&&q++<60){if(seen.has(b)){cyc=true;break}seen.add(b);b=b.blk}if(b&&b.dormant)cyc=true;if(a.v<1&&a.why==='car'&&cyc){a.stk=(a.stk||0)+1/30;st.maxStuck=Math.max(st.maxStuck,a.stk)}else a.stk=0}
+    for(let i=0;i<agents.length;i++)for(let j=i+1;j<agents.length;j++){const A=agents[i],B=agents[j];if(A.dormant||B.dormant||A.x<0||A.y<0||A.x>L.w||A.y>L.h)continue;if(overlap({x:A.x,y:A.y,hw:A.hw-2,hh:A.hh-1,ang:A.ang},{x:B.x,y:B.y,hw:B.hw-2,hh:B.hh-1,ang:B.ang})){st.ov++;if(st.pairs.length<3)st.pairs.push([i,j,Math.round(A.x),Math.round(A.y),A.why,B.why,A.ghost>0,B.ghost>0,Math.round(ltime)])}}}
+  const moving=agents.filter(a=>!a.dormant&&a.v>5).length;TESTNC=false;st.maxStop=Math.round(Math.max(0,...agents.map(a=>a.maxStop||0)));return Object.assign(st,{moving,total:agents.length,dorm:agents.filter(a=>a.dormant).length})},
+  ff:(sec)=>{const st={ov:0,stuck:0,maxStuck:0};const n=Math.round(sec*30);for(let k=0;k<n;k++){update(1/30);if(state!=='play')return Object.assign(st,{state,crashWhy});for(const a of agents){let b=a.blk,q=0;const seen=new Set([a]);let cyc=false;while(b&&b.why==='car'&&q++<60){if(seen.has(b)){cyc=true;break}seen.add(b);b=b.blk}if(b&&b.dormant)cyc=true;if(a.v<1&&a.why==='car'&&cyc){a.stk=(a.stk||0)+1/30;if(a.stk>st.maxStuck)st.maxStuck=a.stk}else a.stk=0}
+  for(let i=0;i<agents.length;i++)for(let j=i+1;j<agents.length;j++){const A=agents[i],B=agents[j];if(A.dormant||B.dormant||A.x<0||A.y<0||A.x>L.w||A.y>L.h)continue;if(overlap({x:A.x,y:A.y,hw:A.hw-2,hh:A.hh-1,ang:A.ang},{x:B.x,y:B.y,hw:B.hw-2,hh:B.hh-1,ang:B.ang})){st.ov++;if(!st.pairs)st.pairs=[];if(st.pairs.length<6)st.pairs.push([i,j,Math.round(A.x),Math.round(A.y),+A.ang.toFixed(2),A.why,Math.round(B.x),Math.round(B.y),+B.ang.toFixed(2),B.why,A.ghost>0,B.ghost>0,Math.round(ltime)])}}}st.state=state;return st},ending:()=>playStory(ENDING,showMenu),startLevel:(i,q)=>startLevel(i,q),get:()=>({state,P,agents,peds,ltime,lvl,cam,L,time,crashWhy})};
 })();
 </script>
 </body>
