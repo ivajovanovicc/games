@@ -1002,10 +1002,13 @@ function startLevel(i,quick){clearTimeout(pendingT);lvl=i;L=LEVELS[i];
   $('menu').style.display='none';$('ov').classList.remove('show');setCtl(true);$('timer').style.display='';$('bRestart').style.display='';$('bCar').style.display='none';$('carpick').classList.remove('show');
   {const ch=CHAPS[chapOf(i)];$('lvlName').innerHTML='<small>'+(chapOf(i)===2?'LETOVANJE · ':'')+'NIVO '+(i-ch.from+1)+' / '+(ch.to-ch.from)+'</small>'+L.name}$('tval').textContent='0.0';
   if(L.big&&!quick){state='intro';introT=0;cam=overviewCam();$('skip').style.display='block';showHint('Ovo je mapa. Cilj je zeleno P mesto 🅿️',HOLD*1000+ZOOM*1000)}
-  else{state='play';$('skip').style.display='none';cam=L.big?followCam():overviewCam();showHint(L.hint);setTimeout(()=>sfx.start(),60)}}
+  else{state='play';$('skip').style.display='none';cam=L.big?followCam():smallCam();showHint(L.hint);setTimeout(()=>sfx.start(),60)}}
 function overviewCam(){return {x:L.w/2,y:L.h/2,s:Math.min(cw/L.w,ch/L.h)}}
 function followCam(){const s=Math.min(cw/340,ch/520,2);let x=P.x+Math.cos(P.ang)*P.v*.45,y=P.y+Math.sin(P.ang)*P.v*.45;
   const hw=cw/(2*s),hh=ch/(2*s);x=L.w<=2*hw?L.w/2:clamp(x,hw,L.w-hw);y=L.h<=2*hh?L.h/2:clamp(y,hh,L.h-hh);return {x,y,s}}
+function smallCam(){const sf=Math.min(cw/L.w,ch/L.h),sc=Math.max(sf,Math.min(cw/L.w,ch/(0.72*L.h)));
+  const hw=cw/(2*sc),hh=ch/(2*sc);let x=L.w/2,y=L.h/2;
+  if(L.w>2*hw)x=clamp(P.x,hw,L.w-hw);if(L.h>2*hh)y=clamp(P.y+Math.sin(P.ang)*P.v*.35,hh,L.h-hh);return {x,y,s:sc}}
 function endIntro(){state='play';$('skip').style.display='none';showHint(L.hint,5000);sfx.start()}
 $('skip').addEventListener('pointerdown',e=>{e.stopPropagation();if(state==='intro'&&introT<HOLD)introT=HOLD});
 stage.addEventListener('pointerdown',()=>{if(state==='intro'&&introT<HOLD)introT=HOLD});
@@ -1363,7 +1366,7 @@ function update(dt){
       if(introT<HOLD)cam=ov;else{let k=Math.min(1,(introT-HOLD)/ZOOM);k=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
         cam={x:ov.x+(tg.x-ov.x)*k,y:ov.y+(tg.y-ov.y)*k,s:Math.exp(Math.log(ov.s)+(Math.log(tg.s)-Math.log(ov.s))*k)};if(k>=1)endIntro()}}
     else if(state!=='menu'){const tg=followCam(),f=Math.min(1,dt*5);cam.x+=(tg.x-cam.x)*f;cam.y+=(tg.y-cam.y)*f;cam.s+=(tg.s-cam.s)*f}}
-  else cam=overviewCam();
+  else if(state!=='menu'){const tg=smallCam(),f=Math.min(1,dt*4);if(Math.abs(tg.s-cam.s)>.001&&Math.abs(cam.s-tg.s)/tg.s>.3){cam=tg}else{cam.x+=(tg.x-cam.x)*f;cam.y+=(tg.y-cam.y)*f;cam.s+=(tg.s-cam.s)*f}}
   if(state!=='play'){soundFrame(dt,false);return}
   if(!started&&(keys.gas||keys.left||keys.right))started=true;
   const tgt=keys.left&&!keys.right?-STEER_MAX:keys.right&&!keys.left?STEER_MAX:0;
@@ -1415,7 +1418,13 @@ function draw(now){
   if(!L||!bg||state==='menu')return;
   let sx=0,sy=0;if(shake>0){sx=(Math.random()-.5)*shake*16;sy=(Math.random()-.5)*shake*16}
   const s=cam.s;ctx.setTransform(dpr*s,0,0,dpr*s,dpr*(cw/2-cam.x*s+sx),dpr*(ch/2-cam.y*s+sy));
-  ctx.save();rr(ctx,0,0,L.w,L.h,10);ctx.clip();
+  {const vx0=cam.x-cw/(2*s)-20,vx1=cam.x+cw/(2*s)+20,vy0=cam.y-ch/(2*s)-20,vy1=cam.y+ch/(2*s)+20;
+    if(vx0<0||vy0<0||vx1>L.w||vy1>L.h){
+      for(let i=Math.floor(vx0/L.w);i<=Math.floor(vx1/L.w);i++)for(let j=Math.floor(vy0/L.h);j<=Math.floor(vy1/L.h);j++){if(i===0&&j===0)continue;
+        ctx.save();ctx.translate(i*L.w+((i&1)?L.w:0),j*L.h+((j&1)?L.h:0));ctx.scale((i&1)?-1:1,(j&1)?-1:1);ctx.drawImage(bg,0,0,L.w,L.h);ctx.restore()}
+      ctx.fillStyle='rgba(10,17,31,.5)';ctx.beginPath();ctx.rect(vx0,vy0,vx1-vx0,vy1-vy0);ctx.rect(L.w,0,-L.w,L.h);ctx.fill('evenodd');
+      ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=2/s;ctx.strokeRect(0,0,L.w,L.h)}}
+  ctx.save();ctx.beginPath();ctx.rect(0,0,L.w,L.h);ctx.clip();
   ctx.drawImage(bg,0,0,L.w,L.h);ctx.drawImage(marks,0,0,L.w,L.h);
   // stop-line glow
   for(const g of L.gates){const st=sigState(g.sig);const c=st==='G'?'34,197,94':st==='Y'?'250,204,21':'239,68,68';const px=-Math.sin(g.ang),py=Math.cos(g.ang);
@@ -1468,7 +1477,7 @@ function draw(now){
   // screen space: vignette + goal arrow
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const vg=ctx.createRadialGradient(cw/2,ch/2,Math.min(cw,ch)*.45,cw/2,ch/2,Math.max(cw,ch)*.75);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.35)');ctx.fillStyle=vg;ctx.fillRect(0,0,cw,ch);
-  if(L.big&&state==='play'){const tx=cw/2+(t.x-cam.x)*s,ty=ch/2+(t.y-cam.y)*s,m=34;
+  if(state==='play'){const tx=cw/2+(t.x-cam.x)*s,ty=ch/2+(t.y-cam.y)*s,m=34;
     if(tx<m||tx>cw-m||ty<m||ty>ch-m-50){const ax=tx-cw/2,ay=ty-ch/2,a=Math.atan2(ay,ax);
       const kx=ax?((ax>0?cw-m:m)-cw/2)/ax:1e9,ky=ay?((ay>0?ch-m-50:m)-ch/2)/ay:1e9,k2=Math.min(Math.abs(kx),Math.abs(ky));
       const px=cw/2+ax*k2,py=ch/2+ay*k2;ctx.save();ctx.translate(px,py);
