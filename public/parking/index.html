@@ -792,9 +792,12 @@ function house(g,x0,y0,x1,y1,R){grassRect(g,x0,y0,x1,y1,R);g.strokeStyle='#a1620
   g.fillStyle='#57534e';g.fillRect(hx0+14,hy0+8,8,8);
   g.fillStyle='#fff';g.font='800 12px Montserrat,system-ui';g.textAlign='center';g.textBaseline='middle';g.fillText('🏠',(hx0+hx1)/2,my+16)}
 
-function buildBg(L){curLvl=L;L.landmarks=[];curTheme=L.theme||'city';L.seasFx=[];
-  const W=L.w,H=L.h;const BGs=Math.min(2.5,Math.sqrt(9e6/(W*H)));
-  const cnv=document.createElement('canvas');cnv.width=Math.round(W*BGs);cnv.height=Math.round(H*BGs);const g=cnv.getContext('2d');g.scale(BGs,BGs);
+// one reusable canvas for the map and one for tyre marks: iOS Safari has a hard total canvas-memory limit,
+// so creating new canvases on every level start eventually made the game stop drawing
+const BGC=document.createElement('canvas'),MKC=document.createElement('canvas');let bgFor=null;
+function buildBg(L){bgFor=L;curLvl=L;L.landmarks=[];curTheme=L.theme||'city';L.seasFx=[];
+  const W=L.w,H=L.h;const BGs=Math.min(2.5,Math.sqrt(5e6/(W*H)));
+  const cnv=BGC;cnv.width=Math.round(W*BGs);cnv.height=Math.round(H*BGs);const g=cnv.getContext('2d');g.setTransform(1,0,0,1,0,0);g.scale(BGs,BGs);
   const R=rng(LEVELS.indexOf(L)*97+13);
   g.fillStyle=L.ground||(curTheme==='summer'?'#4a4e56':'#3f434a');g.fillRect(0,0,W,H);
   for(let i=0;i<W*H/60;i++){const v=R();g.fillStyle=v<.5?'rgba(0,0,0,.1)':'rgba(255,255,255,.06)';g.fillRect(R()*W,R()*H,.8+R(),.8+R())}
@@ -995,7 +998,7 @@ function startLevel(i,quick){clearTimeout(pendingT);lvl=i;L=LEVELS[i];
   solids=[...L.walls,...L.cars,...L.cones,wall(-60,-60,L.w+60,0),wall(-60,L.h,L.w+60,L.h+60),wall(-60,0,0,L.h),wall(L.w,0,L.w+60,L.h)];
   L.gates.forEach(g=>g.prev=undefined);
   ltime=0;initTraffic();
-  bg=buildBg(L);MS=L.big?1:2.5;marks=document.createElement('canvas');marks.width=Math.round(L.w*MS);marks.height=Math.round(L.h*MS);mctx=marks.getContext('2d');mctx.scale(MS,MS);
+  bg=(bgFor===L&&bg)?bg:buildBg(L);MS=L.big?1:1.5;marks=MKC;marks.width=Math.round(L.w*MS);marks.height=Math.round(L.h*MS);mctx=marks.getContext('2d');mctx.setTransform(1,0,0,1,0,0);mctx.scale(MS,MS);
   time=0;started=false;hold=0;flash=0;shake=0;parts=[];lastRear=null;crashWhy='';updateGear();
   $('menu').style.display='none';$('ov').classList.remove('show');setCtl(true);$('timer').style.display='';$('bRestart').style.display='';$('bCar').style.display='none';$('carpick').classList.remove('show');
   {const ch=CHAPS[chapOf(i)];$('lvlName').innerHTML='<small>'+(chapOf(i)===2?'LETOVANJE · ':'')+'NIVO '+(i-ch.from+1)+' / '+(ch.to-ch.from)+'</small>'+L.name}$('tval').textContent='0.0';
@@ -1251,7 +1254,7 @@ function playStory(scenes,onEnd){setCtl(false);story={scenes,i:0,t:0,onEnd};cons
   const r=el.getBoundingClientRect();SC.width=Math.round(r.width*dpr);SC.height=Math.round(r.height*dpr);showScene()}
 function showScene(){const s=story.scenes[story.i];document.getElementById('cap').innerHTML=s.text;document.getElementById('snext').textContent=s.btn||'Dalje ▶';story.t=0;
   document.getElementById('dots').innerHTML=story.scenes.map((_,i)=>'<i class="'+(i===story.i?'on':'')+'"></i>').join('')}
-function endStory(){document.getElementById('story').style.display='none';const f=story&&story.onEnd;story=null;setCtl(state!=='menu');if(f)f()}
+function endStory(){document.getElementById('story').style.display='none';SC.width=1;SC.height=1;const f=story&&story.onEnd;story=null;setCtl(state!=='menu');if(f)f()}
 document.getElementById('snext').onclick=()=>{if(!story)return;story.i++;if(story.i>=story.scenes.length)endStory();else showScene()};
 document.getElementById('sskip').onclick=()=>endStory();
 function drawStory(dt){story.t+=dt;const r=SC.getBoundingClientRect();const w=r.width,h=r.height;if(SC.width!==Math.round(w*dpr)){SC.width=Math.round(w*dpr);SC.height=Math.round(h*dpr)}
