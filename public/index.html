@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,500;0,600;0,700;0,800;0,900;1,900&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0b1324;--txt:#fff;--mut:#a9b6cc;--green:#3ddc84;--violet:#8b7cf6}
+:root{--bg:#0b1324;--txt:#fff;--mut:#a9b6cc;--green:#3ddc84;--brand:#ffb547;--brand2:#ff7a59;--violet:#8b7cf6}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg)}
 body{position:relative;min-height:100vh;min-height:100dvh;overflow-x:hidden;color:var(--txt);
@@ -22,8 +22,8 @@ body{position:relative;min-height:100vh;min-height:100dvh;overflow-x:hidden;colo
   padding:max(28px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 /* zeleni talasi u uglovima */
 .blob{position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(60px);opacity:.35}
-.blob.tl{top:-140px;left:-140px;width:300px;height:300px;background:#22c55e}
-.blob.br{bottom:-160px;right:-140px;width:320px;height:320px;background:#16a34a}
+.blob.tl{top:-140px;left:-140px;width:300px;height:300px;background:#ff9a4d;opacity:.22}
+.blob.br{bottom:-160px;right:-140px;width:320px;height:320px;background:#ff7a59;opacity:.18}
 .wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto}
 
 /* header */
@@ -31,9 +31,9 @@ header{padding:6px 6px 26px}
 .logo{display:flex;align-items:center;gap:12px}
 .logo svg{width:58px;height:58px;flex:none}
 h1{font-size:clamp(40px,12vw,58px);font-weight:900;font-style:italic;letter-spacing:-1.5px;line-height:1}
-h1 span{background:linear-gradient(90deg,#3ddc84,#86efac);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1 span{background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
 header p{margin-top:14px;color:var(--mut);font-weight:500;font-size:16px;line-height:1.5;max-width:420px}
-header .line{margin-top:14px;width:64px;height:4px;border-radius:4px;background:var(--green)}
+header .line{margin-top:14px;width:64px;height:4px;border-radius:4px;background:linear-gradient(90deg,var(--brand),var(--brand2))}
 
 /* kartice */
 .games{display:grid;grid-template-columns:1fr;gap:16px}
@@ -96,8 +96,8 @@ footer{margin-top:30px;display:flex;flex-direction:column;align-items:center;gap
     <div class="logo">
       <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
         <path d="M18 18h28c8 0 13 6 15 15l2 9c1.5 7-6 11-11 6l-6-6H18l-6 6c-5 5-12.5 1-11-6l2-9c2-9 7-15 15-15z" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
-        <path d="M20 26v10M15 31h10" stroke="#3ddc84" stroke-width="4" stroke-linecap="round"/>
-        <circle cx="44" cy="27" r="2.8" fill="#3ddc84"/><circle cx="49" cy="32" r="2.8" fill="#3ddc84"/><circle cx="39" cy="32" r="2.8" fill="#3ddc84"/><circle cx="44" cy="37" r="2.8" fill="#3ddc84"/>
+        <path d="M20 26v10M15 31h10" stroke="#ffb547" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="44" cy="27" r="2.8" fill="#ffb547"/><circle cx="49" cy="32" r="2.8" fill="#ffb547"/><circle cx="39" cy="32" r="2.8" fill="#ffb547"/><circle cx="44" cy="37" r="2.8" fill="#ffb547"/>
       </svg>
       <h1>Igri<span>ce</span></h1>
     </div>
