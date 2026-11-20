@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ko je brži? – igra za dvoje</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; background: #0f172a; color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden; touch-action: manipulation;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  .bar {
+    flex: 0 0 20%; display: flex; align-items: center; gap: 14px;
+    padding: 0 18px; cursor: pointer; touch-action: none; transition: background .15s, filter .15s;
+  }
+  .bar.p1 { background: #ea580c; }
+  .bar.p2 { background: #7c3aed; transform: rotate(180deg); }
+  .bar.good { filter: brightness(1.4); }
+  .bar.bad { background: #991b1b !important; }
+  .bar.locked { opacity: .55; }
+  .score { font-size: clamp(34px, 10vw, 60px); font-weight: 800; min-width: 2.2ch; text-align: center; }
+  .hint { flex: 1; font-size: clamp(13px, 3.8vw, 19px); line-height: 1.25; text-align: center; font-weight: 600; }
+  .tap {
+    width: clamp(46px, 13vw, 70px); height: clamp(46px, 13vw, 70px); border-radius: 50%;
+    background: rgba(255,255,255,.25); border: 3px solid rgba(255,255,255,.8);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;
+  }
+  #boardWrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  canvas { display: block; border-radius: 16px; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,.95); z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; gap: 14px;
+  }
+  .overlay.hidden { display: none; }
+  .overlay h1 { margin: 0; font-size: clamp(32px, 9vw, 52px); }
+  .overlay p { margin: 0; max-width: 460px; line-height: 1.45; color: #cbd5e1; }
+  button.big {
+    font-size: 22px; padding: 14px 38px; border-radius: 999px; border: 0;
+    background: #22c55e; color: #fff; font-weight: 800; cursor: pointer;
+  }
+  .keys { font-size: 13px; color: #94a3b8; }
+  #skipBtn {
+    position: fixed; left: 6px; top: 50%; transform: translateY(-50%); z-index: 5;
+    width: 40px; height: 40px; border-radius: 50%; border: 2px solid #475569;
+    background: rgba(30,41,59,.9); color: #e2e8f0; font-size: 17px; cursor: pointer; padding: 0;
+  }
+  #skipBtn.hidden { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar p2" id="bar1">
+    <div class="score" id="score1">0</div>
+    <div class="hint" id="hint1"></div>
+  </div>
+  <div id="boardWrap"><canvas id="board"></canvas></div>
+  <button id="skipBtn" class="hidden" title="Preskoči ovu igru">⏭</button>
+  <div class="bar p1" id="bar0">
+    <div class="score" id="score0">0</div>
+    <div class="hint" id="hint0"></div>
+  </div>
+</div>
+
+<div class="overlay" id="startScreen">
+  <h1>Ko je brži? ⚡</h1>
+  <p>Igra za dvoje na jednom telefonu ili tabletu. Svako drži svoju stranu ekrana.</p>
+  <p>Na sredini se pojavljuje mini-igrica. Kad je uslov ispunjen, prvi koji pritisne svoju stranu dobija <b>+1</b>. Ko pritisne u pogrešnom trenutku dobija <b>−1</b>.</p>
+  <p>Igraju se sve igrice redom, a na kraju pobeđuje ko ima <b>više poena</b>.</p>
+  <button class="big" id="startBtn">Počni</button>
+  <div class="keys">Na računaru: taster <b>A</b> = narandžasti (dole), taster <b>L</b> = ljubičasti (gore)</div>
+</div>
+
+<div class="overlay hidden" id="winScreen">
+  <h1 id="winText"></h1>
+  <p id="winScore"></p>
+  <button class="big" id="againBtn">Igraj ponovo</button>
+</div>
+
+<script>
+/* =========================================================
+   OSNOVNA PODEŠAVANJA
+   ========================================================= */
+const INTRO_MS = 4500;                   // koliko dugo se prikazuje uputstvo pre igre
+const PLAYERS = [
+  { name: 'Narandžasti', color: '#ea580c' },   // dole
+  { name: 'Ljubičasti',  color: '#7c3aed' }    // gore
+];
+
+/* =========================================================
+   POMOĆNE FUNKCIJE
+   ========================================================= */
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const fmtNum = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function rr(ctx, x, y, w, h, r) {           // zaobljen pravougaonik
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function fitFont(ctx, text, maxW, size, weight = '800') {
+  let s = size;
+  do { ctx.font = `${weight} ${s}px system-ui, sans-serif`; s -= 1; } while (ctx.measureText(text).width > maxW && s > 8);
+}
+// Crta isti tekst dva puta: u donjoj polovini normalno, u gornjoj okrenuto (za drugog igrača)
+function dual(ctx, s, fn) {
+  ctx.save(); fn(s / 2, s * 0.75); ctx.restore();
+  ctx.save(); ctx.translate(s, s); ctx.rotate(Math.PI); fn(s / 2, s * 0.75); ctx.restore();
+}
+function bg(ctx, s, color) { ctx.fillStyle = color; ctx.fillRect(0, 0, s, s); }
+function emoji(ctx, ch, x, y, size) {
+  ctx.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, x, y);
+}
+// Da li postoji put kroz "slobodna" polja od (0,0) do (n-1,n-1)
+function pathExists(n, free) {
+  if (!free(0, 0) || !free(n - 1, n - 1)) return false;
+  const seen = new Set(['0,0']), q = [[0, 0]];
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (x === n - 1 && y === n - 1) return true;
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+      if (nx >= 0 && ny >= 0 && nx < n && ny < n && !seen.has(k) && free(nx, ny)) { seen.add(k); q.push([nx, ny]); }
+    }
+  }
+  return false;
+}
+
+/* Igrica koja svaki korak pravi novu sliku: biramo da li ovaj put "treba" da bude tačno,
+   pa generišemo dok ne dobijemo takvu sliku. */
+function genGame(def) {
+  const sample = want => {
+    let d;
+    for (let i = 0; i < 400; i++) { d = def.gen(want); if (def.check(d) === want) return d; }
+    return d;
+  };
+  let misses = 0;
+  return Object.assign({
+    maxSteps: 14,
+    init: () => { misses = 0; return sample(false); },
+    step: () => {
+      const want = Math.random() < def.p || (def.maxGap && misses >= def.maxGap);
+      misses = want ? 0 : misses + 1;
+      return sample(want);
+    },
+  }, def);
+}
+
+/* =========================================================
+   10 MINI-IGRICA
+   Svaka ima: name, hint, interval, init, step, check, draw
+   ========================================================= */
+const DICE_COLORS = { g: '#16a34a', b: '#2563eb' };
+const PIPS = {
+  1: [[.5,.5]], 2: [[.27,.27],[.73,.73]], 3: [[.27,.27],[.5,.5],[.73,.73]],
+  4: [[.27,.27],[.73,.27],[.27,.73],[.73,.73]], 5: [[.27,.27],[.73,.27],[.5,.5],[.27,.73],[.73,.73]],
+  6: [[.27,.25],[.73,.25],[.27,.5],[.73,.5],[.27,.75],[.73,.75]]
+};
+
+const CAPITALS = [
+  ['Srbija','Beograd'],['Francuska','Pariz'],['Nemačka','Berlin'],['Italija','Rim'],['Španija','Madrid'],
+  ['Grčka','Atina'],['Austrija','Beč'],['Mađarska','Budimpešta'],['Hrvatska','Zagreb'],['Slovenija','Ljubljana'],
+  ['Crna Gora','Podgorica'],['Bosna i Hercegovina','Sarajevo'],['Severna Makedonija','Skoplje'],['Bugarska','Sofija'],
+  ['Rumunija','Bukurešt'],['Rusija','Moskva'],['Ukrajina','Kijev'],['Poljska','Varšava'],['Češka','Prag'],
+  ['Slovačka','Bratislava'],['Švajcarska','Bern'],['Holandija','Amsterdam'],['Belgija','Brisel'],['Portugal','Lisabon'],
+  ['Velika Britanija','London'],['Irska','Dablin'],['Norveška','Oslo'],['Švedska','Stokholm'],['Finska','Helsinki'],
+  ['Danska','Kopenhagen'],['Turska','Ankara'],['Japan','Tokio'],['Kina','Peking'],['Kanada','Otava'],
+  ['Australija','Kanbera'],['Brazil','Brazilija'],['Egipat','Kairo'],['SAD','Vašington'],['Albanija','Tirana']
+];
+// Česte zamke – pogrešni gradovi koji zvuče "tačno"
+const TRAPS = { 'Australija':'Sidnej','Turska':'Istanbul','Kanada':'Toronto','SAD':'Njujork','Brazil':'Rio de Žaneiro','Švajcarska':'Cirih' };
+
+const FACE_COLORS = ['#facc15', '#fb923c', '#f472b6', '#60a5fa', '#4ade80', '#c084fc', '#2dd4bf'];
+
+const STROOP = [
+  ['CRVENA','#ef4444'],['PLAVA','#3b82f6'],['ZELENA','#22c55e'],
+  ['ŽUTA','#eab308'],['LJUBIČASTA','#a855f7'],['NARANDŽASTA','#f97316']
+];
+
+const SHAPES = ['krug','kvadrat','trougao','zvezda','romb','srce'];
+const SHAPE_COLORS = ['#f43f5e','#3b82f6','#22c55e','#eab308','#a855f7','#06b6d4'];
+function drawShape(ctx, type, cx, cy, r, color) {
+  ctx.fillStyle = color; ctx.beginPath();
+  if (type === 'krug') ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  else if (type === 'kvadrat') ctx.rect(cx - r * .85, cy - r * .85, r * 1.7, r * 1.7);
+  else if (type === 'trougao') { ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r * .8); ctx.lineTo(cx - r, cy + r * .8); }
+  else if (type === 'romb') { ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r * .8, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r * .8, cy); }
+  else if (type === 'zvezda') {
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * .45 : r;
+      ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
+    }
+  } else if (type === 'srce') {
+    ctx.moveTo(cx, cy + r * .9);
+    ctx.bezierCurveTo(cx - r * 1.4, cy, cx - r * .7, cy - r * 1.1, cx, cy - r * .4);
+    ctx.bezierCurveTo(cx + r * .7, cy - r * 1.1, cx + r * 1.4, cy, cx, cy + r * .9);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function tttWinner(b) {
+  const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for (const [a, c, d] of L) if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
+  return null;
+}
+function newTTT() { return { b: Array(9).fill(''), turn: Math.random() < .5 ? 'X' : 'O', hold: 0 }; }
+
+function newGrid(n) {
+  let g;
+  do {
+    g = Array.from({ length: n * n }, () => Math.random() < .45);
+    g[0] = true; g[n * n - 1] = true;
+  } while (pathExists(n, (x, y) => g[y * n + x]));
+  return { n, g, hold: 0 };
+}
+
+/* ---- Pravi lavirint: zidovi su linije između polja ----
+   v[y][x] = zid desno od polja (x,y), h[y][x] = zid ispod polja (x,y) */
+function makeMaze(n) {
+  const v = Array.from({ length: n }, () => Array(n).fill(true));
+  const h = Array.from({ length: n }, () => Array(n).fill(true));
+  const seen = Array.from({ length: n }, () => Array(n).fill(false));
+  const stack = [[0, 0]]; seen[0][0] = true;
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const nb = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([a, b]) => a >= 0 && b >= 0 && a < n && b < n && !seen[b][a]);
+    if (!nb.length) { stack.pop(); continue; }
+    const [nx, ny] = pick(nb);
+    setWall({ v, h }, [x, y], [nx, ny], false);
+    seen[ny][nx] = true; stack.push([nx, ny]);
+  }
+  return { n, v, h };
+}
+function setWall(m, [x1, y1], [x2, y2], on) {
+  if (y1 === y2) m.v[y1][Math.min(x1, x2)] = on; else m.h[Math.min(y1, y2)][x1] = on;
+}
+function openRandomWall(m) {
+  const x = randInt(0, m.n - 2), y = randInt(0, m.n - 2);
+  if (Math.random() < .5) m.v[y][x] = false; else m.h[y][x] = false;
+}
+function mazePath(m) {                       // vraća put od (0,0) do (n-1,n-1) ili null
+  const n = m.n, prev = {}, q = [[0, 0]]; prev['0,0'] = null;
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (x === n - 1 && y === n - 1) {
+      const path = []; let k = x + ',' + y;
+      while (k) { path.unshift(k.split(',').map(Number)); k = prev[k]; }
+      return path;
+    }
+    const moves = [];
+    if (x < n - 1 && !m.v[y][x]) moves.push([x + 1, y]);
+    if (x > 0 && !m.v[y][x - 1]) moves.push([x - 1, y]);
+    if (y < n - 1 && !m.h[y][x]) moves.push([x, y + 1]);
+    if (y > 0 && !m.h[y - 1][x]) moves.push([x, y - 1]);
+    for (const [a, b] of moves) { const k = a + ',' + b; if (!(k in prev)) { prev[k] = x + ',' + y; q.push([a, b]); } }
+  }
+  return null;
+}
+
+const GAMES = [
+  /* 1 */ genGame({
+    name: 'Zbir boja', hits: 2,
+    hint: 'Pritisni kad je zbir ZELENIH kockica jednak zbiru PLAVIH',
+    interval: 3200, p: .42, maxGap: 2,
+    gen: () => Array.from({ length: 6 }, () => ({ c: pick(['g', 'b']), v: randInt(1, 6) })),
+    check: d => {
+      const sg = d.filter(x => x.c === 'g').reduce((a, x) => a + x.v, 0);
+      const sb = d.filter(x => x.c === 'b').reduce((a, x) => a + x.v, 0);
+      return sg > 0 && sg === sb;
+    },
+    draw(ctx, s, d) {
+      bg(ctx, s, '#e2e8f0');
+      const cw = s / 3, ch = s / 2, size = Math.min(cw, ch) * .72;
+      d.forEach((die, i) => {
+        const cx = (i % 3 + .5) * cw, cy = (Math.floor(i / 3) + .5) * ch, x = cx - size / 2, y = cy - size / 2;
+        ctx.fillStyle = DICE_COLORS[die.c]; rr(ctx, x, y, size, size, size * .16); ctx.fill();
+        ctx.fillStyle = '#fff';
+        for (const [px, py] of PIPS[die.v]) { ctx.beginPath(); ctx.arc(x + px * size, y + py * size, size * .085, 0, Math.PI * 2); ctx.fill(); }
+      });
+    }
+  }),
+
+  /* 2 */ genGame({
+    name: 'Beli ekran', hits: 3,
+    hint: 'Pritisni kad polje postane BELO',
+    interval: () => rand(800, 1700), p: .25, maxSteps: 18,
+    gen: want => ({ c: want ? '#ffffff' : pick(['#ef4444','#3b82f6','#22c55e','#eab308','#e2e8f0','#fde68a','#a855f7','#000000','#fbcfe8']) }),
+    check: d => d.c === '#ffffff',
+    draw(ctx, s, d) { bg(ctx, s, d.c); }
+  }),
+
+  /* 3 */ {
+    name: 'Iks-oks', hits: 3,
+    hint: 'Pritisni kad neko ima 3 u nizu',
+    interval: 900, maxSteps: 30,
+    init: newTTT,
+    step(st) {
+      if (tttWinner(st.b)) { st.hold++; return st.hold >= 3 ? newTTT() : st; }
+      const empty = st.b.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+      if (!empty.length) {                     // tabla puna bez pobednika – menjaju se postojeći znakovi
+        const i = randInt(0, 8); st.b[i] = st.b[i] === 'X' ? 'O' : 'X';
+        return st;
+      }
+      st.b[pick(empty)] = st.turn; st.turn = st.turn === 'X' ? 'O' : 'X';
+      return st;
+    },
+    check: st => !!tttWinner(st.b),
+    draw(ctx, s, st) {
+      bg(ctx, s, '#f8fafc');
+      const c = s / 3;
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = s * .015; ctx.lineCap = 'round';
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath(); ctx.moveTo(i * c, c * .15); ctx.lineTo(i * c, s - c * .15); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(c * .15, i * c); ctx.lineTo(s - c * .15, i * c); ctx.stroke();
+      }
+      ctx.lineWidth = s * .03;
+      st.b.forEach((v, i) => {
+        const cx = (i % 3 + .5) * c, cy = (Math.floor(i / 3) + .5) * c, r = c * .28;
+        if (v === 'X') {
+          ctx.strokeStyle = '#ef4444'; ctx.beginPath();
+          ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r); ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r); ctx.stroke();
+        } else if (v === 'O') {
+          ctx.strokeStyle = '#2563eb'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+        }
+      });
+    }
+  },
+
+  /* 4 */ genGame({
+    name: 'Miš i sir',
+    hint: 'Pritisni ako miš MOŽE da stigne do sira',
+    interval: 4200, p: .4, maxSteps: 10, hits: 2,
+    gen: want => {
+      const n = 10, m = makeMaze(n);
+      // nasumični prolazi viška – lavirint dobija petlje i lažne puteve (teže se proverava)
+      for (let k = 0; k < 7; k++) openRandomWall(m);
+      if (!want) {
+        // zatvori jedan zid na putu od miša do sira
+        const path = mazePath(m);
+        if (path) {
+          const i = randInt(0, path.length - 2), [a, b] = [path[i], path[i + 1]];
+          setWall(m, a, b, true);
+        }
+      }
+      return m;
+    },
+    check: m => !!mazePath(m),
+    draw(ctx, s, m) {
+      bg(ctx, s, '#fef9c3');
+      const pad = s * .03, c = (s - pad * 2) / m.n;
+      ctx.strokeStyle = '#422006'; ctx.lineWidth = Math.max(3, c * .12); ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.rect(pad, pad, c * m.n, c * m.n);
+      for (let y = 0; y < m.n; y++) for (let x = 0; x < m.n; x++) {
+        const X = pad + x * c, Y = pad + y * c;
+        if (x < m.n - 1 && m.v[y][x]) { ctx.moveTo(X + c, Y); ctx.lineTo(X + c, Y + c); }
+        if (y < m.n - 1 && m.h[y][x]) { ctx.moveTo(X, Y + c); ctx.lineTo(X + c, Y + c); }
+      }
+      ctx.stroke();
+      emoji(ctx, '🐭', pad + c / 2, pad + c / 2, c * .7);
+      emoji(ctx, '🧀', pad + c * (m.n - .5), pad + c * (m.n - .5), c * .7);
+    }
+  }),
+
+  /* 5 */ genGame({
+    name: 'Tužno lice', hits: 2,
+    hint: 'Pritisni kad među smajlićima ima TUŽNO lice (smajlići su okrenuti na obe strane!)',
+    interval: 1700, p: .33, maxSteps: Infinity, clicks: 3, quietResult: true,
+    onPress: d => { d.reveal = true; },
+    gen: want => {
+      const f = Array.from({ length: 16 }, () => ({ t: 'h', c: pick(FACE_COLORS), up: Math.random() < .5 }));
+      if (want) f[randInt(0, 15)].t = 's';
+      return { f };
+    },
+    check: d => d.f.some(x => x.t === 's'),
+    draw(ctx, s, d) {
+      bg(ctx, s, '#1e293b');
+      const c = s / 4, r = c * .38;
+      d.f.forEach((face, i) => {
+        ctx.save();
+        ctx.translate((i % 4 + .5) * c, (Math.floor(i / 4) + .5) * c);
+        if (face.up) ctx.rotate(Math.PI);          // okrenut prema gornjem igraču
+        ctx.fillStyle = face.c; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.arc(-r * .35, -r * .25, r * .11, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(r * .35, -r * .25, r * .11, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = r * .12; ctx.lineCap = 'round'; ctx.beginPath();
+        if (face.t === 'h') ctx.arc(0, r * .05, r * .5, .2 * Math.PI, .8 * Math.PI);
+        else ctx.arc(0, r * .65, r * .45, 1.2 * Math.PI, 1.8 * Math.PI);
+        ctx.stroke();
+        // posle pogotka: ostali se zatamne, tužni dobije beli okvir
+        if (d.reveal) {
+          if (face.t === 's') { ctx.strokeStyle = '#fff'; ctx.lineWidth = r * .14; ctx.beginPath(); ctx.arc(0, 0, r * 1.12, 0, Math.PI * 2); ctx.stroke(); }
+          else { ctx.fillStyle = 'rgba(15,23,42,.78)'; ctx.beginPath(); ctx.arc(0, 0, r + 1, 0, Math.PI * 2); ctx.fill(); }
+        }
+        ctx.restore();
+      });
+    }
+  }),
+
+  /* 6 */ {
+    name: 'Odbrojavanje',
+    hint: 'Brojevi nestanu – pritisni kad misliš da je stiglo do NULE',
+    timed: true, rounds: 2,
+    resultShift: .14,
+    init: () => ({ S: Math.round(rand(3, 6.5) * 10) / 10, t0: 0, pressed: null, early: [null, null] }),
+    onStart: (st, now) => { st.t0 = now; },
+    maxTime: st => st.S * 1000 + 3500,
+    check: (st, now) => now - st.t0 >= st.S * 1000,
+    onPress: (st, now) => { st.pressed = st.S - (now - st.t0) / 1000; },
+    onWrong: (st, now, p) => { st.early[p] = { val: st.S - (now - st.t0) / 1000, until: now + 1300 }; },
+    draw(ctx, s, st, now) {
+      bg(ctx, s, '#0b1220');
+      const el = now - st.t0, rem = st.S - el / 1000;
+      let txt = el < 1600 ? Math.max(rem, 0).toFixed(1) : '?';
+      if (st.pressed !== null) txt = fmtNum(st.pressed);
+      dual(ctx, s, (cx, cy) => {
+        ctx.fillStyle = txt === '?' ? '#64748b' : '#fbbf24';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        fitFont(ctx, txt, s * .85, s * .2); ctx.fillText(txt, cx, cy + (st.pressed !== null ? s * .06 : 0));
+      });
+      // prerani klik: pokaži tom igraču na kom broju je kliknuo
+      st.early.forEach((e, p) => {
+        if (!e || now > e.until || st.pressed !== null) return;
+        ctx.save();
+        if (p === 1) { ctx.translate(s, s); ctx.rotate(Math.PI); }
+        ctx.fillStyle = 'rgba(153,27,27,.92)'; rr(ctx, s * .1, s * .53, s * .8, s * .2, 14); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const t = 'Prerano! Bilo je ' + fmtNum(e.val);
+        fitFont(ctx, t, s * .72, s * .065); ctx.fillText(t, s / 2, s * .63);
+        ctx.restore();
+      });
+    }
+  },
+
+  /* 7 */ genGame({
+    name: 'Glavni grad', hits: 3,
+    hint: 'Pritisni kad je grad STVARNO glavni grad te države',
+    interval: 2900, p: .33,
+    gen: want => {
+      const [country, cap] = pick(CAPITALS);
+      if (want) return { country, city: cap, ok: true };
+      const city = (TRAPS[country] && Math.random() < .5) ? TRAPS[country] : pick(CAPITALS.filter(x => x[0] !== country))[1];
+      return { country, city, ok: false };
+    },
+    check: d => d.ok,
+    draw(ctx, s, d) {
+      bg(ctx, s, '#1e293b');
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s * .1, s / 2); ctx.lineTo(s * .9, s / 2); ctx.stroke();
+      dual(ctx, s, (cx, cy) => {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff'; fitFont(ctx, d.country, s * .9, s * .08); ctx.fillText(d.country, cx, cy - s * .065);
+        ctx.fillStyle = '#fbbf24'; fitFont(ctx, d.city, s * .9, s * .075, '700'); ctx.fillText(d.city, cx, cy + s * .065);
+      });
+    }
+  }),
+
+  /* 8 */ {
+    name: 'Staza od ugla do ugla',
+    hint: 'Pritisni kad plava polja spoje GORNJI LEVI i DONJI DESNI ugao',
+    interval: 1000, maxSteps: 40,
+    init: () => newGrid(6),
+    step(st) {
+      const n = st.n, connected = pathExists(n, (x, y) => st.g[y * n + x]);
+      if (connected) { st.hold++; if (st.hold >= 4) return newGrid(n); }
+      for (let k = 0; k < 2; k++) {
+        const turnOn = Math.random() < .58;
+        const cand = [];
+        for (let i = 1; i < n * n - 1; i++) if (st.g[i] !== turnOn) cand.push(i);
+        if (cand.length) st.g[pick(cand)] = turnOn;
+      }
+      if (!pathExists(n, (x, y) => st.g[y * n + x])) st.hold = 0;
+      return st;
+    },
+    check: st => pathExists(st.n, (x, y) => st.g[y * st.n + x]),
+    draw(ctx, s, st) {
+      bg(ctx, s, '#e2e8f0');
+      const n = st.n, c = s / n, gap = c * .08;
+      st.g.forEach((on, i) => {
+        const x = (i % n) * c, y = Math.floor(i / n) * c;
+        ctx.fillStyle = on ? '#0ea5e9' : '#cbd5e1';
+        rr(ctx, x + gap, y + gap, c - gap * 2, c - gap * 2, c * .15); ctx.fill();
+      });
+      ctx.fillStyle = '#fff';
+      for (const [x, y] of [[0, 0], [n - 1, n - 1]]) { ctx.beginPath(); ctx.arc((x + .5) * c, (y + .5) * c, c * .17, 0, Math.PI * 2); ctx.fill(); }
+    }
+  },
+
+  /* 9 */ genGame({
+    name: 'Boja reči', hits: 3,
+    hint: 'Pritisni kad je reč napisana bojom koju ZNAČI',
+    interval: 1600, p: .3,
+    gen: () => ({ w: pick(STROOP), c: pick(STROOP)[1] }),
+    check: d => d.w[1] === d.c,
+    draw(ctx, s, d) {
+      bg(ctx, s, '#0b1220');
+      dual(ctx, s, (cx, cy) => {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = d.c;
+        fitFont(ctx, d.w[0], s * .88, s * .14); ctx.fillText(d.w[0], cx, cy);
+      });
+    }
+  }),
+
+  /* 10 */ genGame({
+    name: 'Tri ista oblika', hits: 2,
+    hint: 'Pritisni kad se ISTI oblik pojavi 3 puta',
+    interval: 2600, p: .33,
+    gen: want => {
+      const cells = [];
+      if (want) { const sh = pick(SHAPES); cells.push(sh, sh, sh); }
+      const count = {}; cells.forEach(x => count[x] = (count[x] || 0) + 1);
+      while (cells.length < 9) {
+        const sh = pick(SHAPES);
+        if ((count[sh] || 0) < 2) { cells.push(sh); count[sh] = (count[sh] || 0) + 1; }
+      }
+      return { cells: shuffle(cells).map(t => ({ t, c: pick(SHAPE_COLORS) })) };
+    },
+    check: d => { const k = {}; for (const x of d.cells) { k[x.t] = (k[x.t] || 0) + 1; if (k[x.t] >= 3) return true; } return false; },
+    draw(ctx, s, d) {
+      bg(ctx, s, '#f8fafc');
+      const c = s / 3;
+      d.cells.forEach((x, i) => drawShape(ctx, x.t, (i % 3 + .5) * c, (Math.floor(i / 3) + .5) * c, c * .32, x.c));
+    }
+  }),
+
+  /* 11 */ genGame({
+    name: 'Tačan račun', hits: 3,
+    hint: 'Pritisni kad je račun TAČAN',
+    interval: 2300, p: .33,
+    gen: want => {
+      const op = pick(['+', '−', '×']);
+      let a, b, r;
+      if (op === '+') { a = randInt(3, 49); b = randInt(3, 49); r = a + b; }
+      else if (op === '−') { a = randInt(10, 60); b = randInt(2, a - 1); r = a - b; }
+      else { a = randInt(2, 9); b = randInt(2, 9); r = a * b; }
+      let shown = want ? r : r + pick([-10, -2, -1, 1, 2, 10, op === '×' ? a : 1]);
+      if (shown < 0) shown = r + 1;
+      return { t: `${a} ${op} ${b} = ${shown}`, ok: shown === r };
+    },
+    check: d => d.ok,
+    draw(ctx, s, d) {
+      bg(ctx, s, '#0f2a1e');
+      ctx.strokeStyle = '#1f4d37'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s * .1, s / 2); ctx.lineTo(s * .9, s / 2); ctx.stroke();
+      dual(ctx, s, (cx, cy) => {
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f8fafc';
+        fitFont(ctx, d.t, s * .86, s * .12); ctx.fillText(d.t, cx, cy);
+      });
+    }
+  }),
+
+  /* 12 */ genGame({
+    name: 'Sve strelice isto', hits: 2,
+    hint: 'Pritisni kad SVE strelice pokazuju na istu stranu',
+    interval: 1900, p: .3,
+    gen: want => {
+      const main = randInt(0, 3), a = Array(9).fill(main);
+      if (!want) {                                   // 1–2 strelice "beže" na drugu stranu
+        const odd = randInt(1, 2);
+        for (let k = 0; k < odd; k++) a[randInt(0, 8)] = (main + randInt(1, 3)) % 4;
+      }
+      return { a, col: pick(SHAPE_COLORS) };
+    },
+    check: d => d.a.every(x => x === d.a[0]),
+    draw(ctx, s, d) {
+      bg(ctx, s, '#f8fafc');
+      const c = s / 3, r = c * .3;
+      d.a.forEach((dir, i) => {
+        ctx.save(); ctx.translate((i % 3 + .5) * c, (Math.floor(i / 3) + .5) * c); ctx.rotate(dir * Math.PI / 2);
+        ctx.fillStyle = d.col; ctx.beginPath();
+        ctx.moveTo(r, 0); ctx.lineTo(0, -r); ctx.lineTo(0, -r * .4); ctx.lineTo(-r, -r * .4);
+        ctx.lineTo(-r, r * .4); ctx.lineTo(0, r * .4); ctx.lineTo(0, r); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      });
+    }
+  }),
+
+  /* 13 */ genGame({
+    name: 'Više crvenih', hits: 2,
+    hint: 'Pritisni kad ima VIŠE CRVENIH tačkica nego plavih',
+    interval: 2600, p: .4,
+    gen: () => {
+      const red = randInt(7, 14), blue = Math.max(3, red + pick([-2, -1, 0, 1, 2]));
+      const dots = [], R = .045;
+      const kinds = shuffle([...Array(red).fill('#ef4444'), ...Array(blue).fill('#3b82f6')]);
+      for (const col of kinds) {
+        for (let t = 0; t < 200; t++) {
+          const x = rand(R + .02, 1 - R - .02), y = rand(R + .02, 1 - R - .02);
+          if (dots.every(d => Math.hypot(d.x - x, d.y - y) > R * 2.4)) { dots.push({ x, y, col }); break; }
+        }
+      }
+      return { dots, red: dots.filter(d => d.col === '#ef4444').length, blue: dots.filter(d => d.col === '#3b82f6').length };
+    },
+    check: d => d.red > d.blue,
+    draw(ctx, s, d) {
+      bg(ctx, s, '#f1f5f9');
+      for (const dot of d.dots) { ctx.fillStyle = dot.col; ctx.beginPath(); ctx.arc(dot.x * s, dot.y * s, s * .045, 0, Math.PI * 2); ctx.fill(); }
+    }
+  })
+];
+
+/* =========================================================
+   MOTOR IGRE
+   ========================================================= */
+const canvas = document.getElementById('board'), ctx = canvas.getContext('2d');
+const bars = [document.getElementById('bar0'), document.getElementById('bar1')];
+const scoreEls = [document.getElementById('score0'), document.getElementById('score1')];
+const hintEls = [document.getElementById('hint0'), document.getElementById('hint1')];
+let S = 300;
+
+let scores = [0, 0], phase = 'start', game = null, gs = null, deck = [];
+let stepCount = 0, nextStepAt = 0, introUntil = 0, roundStart = 0, lockedUntil = [0, 0];
+let resultText = '', resultColor = '#fff', hitsInGame = 0, roundsDone = 0, clicksInGame = 0, gameNo = 0;
+
+function resize() {
+  const wrap = document.getElementById('boardWrap');
+  S = Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight) - 16);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = canvas.style.height = S + 'px';
+  canvas.width = canvas.height = Math.floor(S * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+const intervalOf = g => typeof g.interval === 'function' ? g.interval() : g.interval;
+function updateScores() { scores.forEach((v, i) => scoreEls[i].textContent = v); }
+function setHints(t) { /* uputstvo se sada prikazuje na sredini pre svake igre, ne na dugmićima */ }
+function flash(p, cls) { bars[p].classList.add(cls); setTimeout(() => bars[p].classList.remove(cls), 350); }
+
+function startMatch() {
+  scores = [0, 0]; updateScores(); deck = shuffle([...GAMES]); gameNo = 0;
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('winScreen').classList.add('hidden');
+  resize(); nextRound();
+}
+
+function nextRound() {
+  if (!deck.length) { showFinal(); return; }          // odigrane su sve igrice
+  game = deck.pop(); gs = game.init(); stepCount = 0; gameNo++;
+  hitsInGame = 0; roundsDone = 0; clicksInGame = 0;
+  setHints(game.hint);
+  phase = 'intro'; introUntil = performance.now() + INTRO_MS;
+  skipBtn.classList.remove('hidden');
+}
+
+// Preskakanje trenutne igre – bez poena, odmah ide sledeća
+function skipRound() {
+  if (phase !== 'intro' && phase !== 'play') return;
+  phase = 'result'; resultText = 'Preskočeno ⏭'; resultColor = '#e2e8f0';
+  setTimeout(nextRound, 700);
+}
+
+function endRound(winner, now) {
+  phase = 'result';
+  if (winner === null) { resultText = 'Niko nije stigao!'; resultColor = '#e2e8f0'; }
+  else { resultText = '+1 ' + PLAYERS[winner].name + '!'; resultColor = PLAYERS[winner].color; }
+  roundsDone++;
+  setTimeout(() => {
+    if (phase !== 'result') return;
+    let more;
+    if (game.clicks) more = clicksInGame < game.clicks;         // npr. smajlići: ide dok se ne klikne X puta
+    else if (game.rounds) more = roundsDone < game.rounds;       // npr. odbrojavanje: uvek X krugova
+    else more = winner !== null && hitsInGame < (game.hits || 1);
+    if (more) continueGame(); else nextRound();
+  }, winner === null ? 1100 : 1500);
+}
+
+// Ista igrica se nastavlja (npr. nova partija iks-oksa), bez novog uputstva
+function continueGame() {
+  const now = performance.now();
+  gs = game.init(); stepCount = 0; phase = 'play';
+  roundStart = now; nextStepAt = now + intervalOf(game);
+  if (game.onStart) game.onStart(gs, now);
+}
+
+function showFinal() {
+  phase = 'win'; skipBtn.classList.add('hidden');
+  const w = document.getElementById('winText');
+  if (scores[0] === scores[1]) { w.textContent = '🤝 Nerešeno!'; w.style.color = '#e2e8f0'; }
+  else {
+    const p = scores[0] > scores[1] ? 0 : 1;
+    w.textContent = '🏆 Pobedio je ' + PLAYERS[p].name + '!'; w.style.color = PLAYERS[p].color;
+  }
+  document.getElementById('winScore').textContent = `${PLAYERS[0].name} ${scores[0]} : ${scores[1]} ${PLAYERS[1].name}`;
+  document.getElementById('winScreen').classList.remove('hidden');
+}
+
+function press(p) {
+  const now = performance.now();
+  if (phase !== 'play' || now < lockedUntil[p]) return;
+  clicksInGame++;
+  if (game.check(gs, now)) {
+    if (game.onPress) game.onPress(gs, now);
+    hitsInGame++; scores[p]++; updateScores(); flash(p, 'good'); endRound(p, now);
+  } else {
+    if (game.onWrong) game.onWrong(gs, now, p);
+    scores[p]--; updateScores(); flash(p, 'bad');
+    if (game.clicks && clicksInGame >= game.clicks) {      // iskorišćeni svi klikovi – sledeća igrica
+      phase = 'result'; resultText = 'Netačno!'; resultColor = '#fca5a5';
+      setTimeout(() => { if (phase === 'result') nextRound(); }, 1100);
+    }
+    lockedUntil[p] = now + 700;
+    bars[p].classList.add('locked'); setTimeout(() => bars[p].classList.remove('locked'), 700);
+  }
+}
+
+bars.forEach((b, i) => b.addEventListener('pointerdown', e => { e.preventDefault(); press(i); }));
+document.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k === 'a') press(0);
+  if (k === 'l') press(1);
+});
+const skipBtn = document.getElementById('skipBtn');
+skipBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); skipRound(); });
+document.getElementById('startBtn').onclick = startMatch;
+document.getElementById('againBtn').onclick = startMatch;
+
+// Prelama tekst u više redova da stane u zadatu širinu
+function wrapLines(ctx, text, maxW) {
+  const words = text.split(' '), lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawIntro(now) {
+  bg(ctx, S, '#1e293b');
+  const left = Math.max(1, Math.ceil((introUntil - now) / 1000));
+  dual(ctx, S, (cx, cy) => {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // naziv igre
+    ctx.fillStyle = '#fbbf24'; fitFont(ctx, game.name, S * .88, S * .065); ctx.fillText(game.name, cx, cy - S * .165);
+    // uputstvo
+    const fs = S * .05;
+    ctx.font = `700 ${fs}px system-ui, sans-serif`; ctx.fillStyle = '#fff';
+    const lines = wrapLines(ctx, game.hint, S * .86).slice(0, 3);
+    const lh = fs * 1.25, top = cy - S * .02 - (lines.length - 1) * lh / 2;
+    lines.forEach((l, i) => ctx.fillText(l, cx, top + i * lh));
+    // odbrojavanje
+    ctx.fillStyle = '#94a3b8'; ctx.font = `600 ${S * .042}px system-ui, sans-serif`;
+    ctx.fillText('Kreće za ' + left + '...', cx, cy + S * .165);
+  });
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(S * .1, S / 2); ctx.lineTo(S * .9, S / 2); ctx.stroke();
+}
+
+function drawResult() {
+  if (game && game.quietResult && resultText.startsWith('+1')) return;
+  ctx.fillStyle = game && game.resultShift ? 'rgba(15,23,42,.25)' : 'rgba(15,23,42,.6)'; ctx.fillRect(0, 0, S, S);
+  dual(ctx, S, (cx, cy) => {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    fitFont(ctx, resultText, S * .9, S * .08);
+    const y = cy - S * (game && game.resultShift ? game.resultShift : .02);
+    ctx.lineWidth = S * .02; ctx.strokeStyle = '#0f172a'; ctx.strokeText(resultText, cx, y);
+    ctx.fillStyle = resultColor; ctx.fillText(resultText, cx, y);
+  });
+}
+
+function loop(now) {
+  if (phase === 'intro' && now >= introUntil) {
+    phase = 'play'; roundStart = now; nextStepAt = now + intervalOf(game);
+    if (game.onStart) game.onStart(gs, now);
+  }
+  if (phase === 'play') {
+    if (game.timed) {
+      if (now - roundStart > game.maxTime(gs)) endRound(null, now);
+    } else if (now >= nextStepAt) {
+      stepCount++;
+      if (stepCount > game.maxSteps) endRound(null, now);
+      else { gs = game.step(gs, stepCount); nextStepAt = now + intervalOf(game); }
+    }
+  }
+  if (phase === 'intro') drawIntro(now);
+  else if (phase === 'play' || phase === 'result') {
+    game.draw(ctx, S, gs, now);
+    if (phase === 'result') drawResult();
+  }
+  requestAnimationFrame(loop);
+}
+
+resize();
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
