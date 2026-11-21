@@ -907,7 +907,9 @@ function resize(){const r=stage.getBoundingClientRect();dpr=window.devicePixelRa
 window.addEventListener('resize',()=>{resize();if(state==='menu')drawHero()});
 
 function setCtl(on){const c=$('controls');const v=on?'':'none';if(c.style.display!==v){c.style.display=v;requestAnimationFrame(resize)}}
-function showMenu(){clearTimeout(pendingT);state='menu';setCtl(false);$('menu').style.display='block';$('ov').classList.remove('show');$('lvlName').innerHTML='<span class="lg">//</span>Parking <em>majstor</em>';$('timer').style.display='none';$('bRestart').style.display='none';$('bCar').style.display='';setTimeout(drawHero,30);$('hint').style.opacity=0;$('skip').style.display='none';buildMenu()}
+const NAV_HOME='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h4.5v-5.5h3V20H18V9.5"/></svg>',NAV_MENU='<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h11" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
+function setNav(home){const b=$('bMenu');b.innerHTML=home?NAV_HOME:NAV_MENU;b.setAttribute('aria-label',home?'Sve igrice':'Nivoi');b.title=home?'Sve igrice (početna)':'Nazad na nivoe'}
+function showMenu(){clearTimeout(pendingT);state='menu';setNav(true);setCtl(false);$('menu').style.display='block';$('ov').classList.remove('show');$('lvlName').innerHTML='<span class="lg">//</span>Parking <em>majstor</em>';$('timer').style.display='none';$('bRestart').style.display='none';$('bCar').style.display='';setTimeout(drawHero,30);$('hint').style.opacity=0;$('skip').style.display='none';buildMenu()}
 
 let hintTimer=null;
 function showHint(t,ms){const h=$('hint');h.textContent=t;h.style.opacity=1;clearTimeout(hintTimer);hintTimer=setTimeout(()=>h.style.opacity=0,ms||4500)}
@@ -992,7 +994,7 @@ function updateTraffic(dt){
     Object.assign(a,posAt(m,a.d))}}
 
 let pendingT=null;
-function startLevel(i,quick){clearTimeout(pendingT);lvl=i;L=LEVELS[i];
+function startLevel(i,quick){clearTimeout(pendingT);setNav(false);lvl=i;L=LEVELS[i];
   P={x:L.start.x,y:L.start.y,ang:L.start.ang,v:0,steer:0,gear:'D'};
   solids=[...L.walls,...L.cars,...L.cones,wall(-60,-60,L.w+60,0),wall(-60,L.h,L.w+60,L.h+60),wall(-60,0,0,L.h),wall(L.w,0,L.w+60,L.h)];
   L.gates.forEach(g=>g.prev=undefined);
@@ -1356,7 +1358,7 @@ document.addEventListener('contextmenu',e=>e.preventDefault());
 const KM={ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right',ArrowUp:'gas',w:'gas',W:'gas',ArrowDown:'brake',s:'brake',S:'brake',' ':'brake'};
 window.addEventListener('keydown',e=>{if(KM[e.key]){keys[KM[e.key]]=true;e.preventDefault()}if((e.key==='r'||e.key==='R')&&!e.repeat)toggleGear()});
 window.addEventListener('keyup',e=>{if(KM[e.key])keys[KM[e.key]]=false});
-$('bMenu').onclick=showMenu;$('bStory').onclick=()=>playStory(curChap===2?INTRO2:INTRO,null);document.querySelectorAll('.ctab').forEach(b=>b.onclick=()=>setChap(+b.dataset.c));$('bRestart').onclick=()=>{if(L)startLevel(lvl,true)};
+$('bMenu').onclick=()=>{if(state==='menu')location.href='../';else showMenu()};$('bStory').onclick=()=>playStory(curChap===2?INTRO2:INTRO,null);document.querySelectorAll('.ctab').forEach(b=>b.onclick=()=>setChap(+b.dataset.c));$('bRestart').onclick=()=>{if(L)startLevel(lvl,true)};
 $('bSound').onclick=()=>setMute(!muted);$('bSound').innerHTML=sndIcon(muted);
 
 // ---------- update ----------

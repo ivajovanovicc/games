@@ -38,7 +38,7 @@
   .overlay.hidden { display: none; }
   .overlay h1 { margin: 0; font-size: clamp(32px, 9vw, 52px); }
   .overlay p { margin: 0; max-width: 460px; line-height: 1.45; color: #cbd5e1; }
-  button.big {
+  .big {
     font-size: 22px; padding: 14px 38px; border-radius: 999px; border: 0;
     background: #22c55e; color: #fff; font-weight: 800; cursor: pointer;
   }
@@ -49,6 +49,22 @@
     background: rgba(30,41,59,.9); color: #e2e8f0; font-size: 17px; cursor: pointer; padding: 0;
   }
   #skipBtn.hidden { display: none; }
+  #pauseBtn {
+    position: fixed; right: 6px; top: 50%; transform: translateY(-50%); z-index: 5;
+    width: 40px; height: 40px; border-radius: 50%; border: 2px solid #475569;
+    background: rgba(30,41,59,.9); color: #e2e8f0; cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #pauseBtn.hidden { display: none; }
+  #pauseBtn svg { width: 18px; height: 18px; }
+  .big.sec { background: #1e293b; border: 2px solid #475569; color: #e2e8f0; font-size: 18px; padding: 11px 30px; }
+  .btns { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .homeLink {
+    position: absolute; left: max(14px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
+    display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px;
+    border: 2px solid #334155; background: #1e293b; color: #e2e8f0; text-decoration: none; font-weight: 700; font-size: 15px;
+  }
+  .homeLink svg { width: 18px; height: 18px; }
 </style>
 </head>
 <body>
@@ -59,6 +75,7 @@
   </div>
   <div id="boardWrap"><canvas id="board"></canvas></div>
   <button id="skipBtn" class="hidden" title="Preskoči ovu igru">⏭</button>
+  <button id="pauseBtn" class="hidden" title="Pauza" aria-label="Pauza"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
   <div class="bar p1" id="bar0">
     <div class="score" id="score0">0</div>
     <div class="hint" id="hint0"></div>
@@ -66,6 +83,7 @@
 </div>
 
 <div class="overlay" id="startScreen">
+  <a class="homeLink" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h4.5v-5.5h3V20H18V9.5"/></svg>Sve igrice</a>
   <h1>Ko je brži? ⚡</h1>
   <p>Igra za dvoje na jednom telefonu ili tabletu. Svako drži svoju stranu ekrana.</p>
   <p>Na sredini se pojavljuje mini-igrica. Kad je uslov ispunjen, prvi koji pritisne svoju stranu dobija <b>+1</b>. Ko pritisne u pogrešnom trenutku dobija <b>−1</b>.</p>
@@ -77,7 +95,20 @@
 <div class="overlay hidden" id="winScreen">
   <h1 id="winText"></h1>
   <p id="winScore"></p>
-  <button class="big" id="againBtn">Igraj ponovo</button>
+  <div class="btns">
+    <button class="big" id="againBtn">Igraj ponovo</button>
+    <a class="big sec" href="../" style="text-decoration:none">Sve igrice</a>
+  </div>
+</div>
+
+<div class="overlay hidden" id="pauseScreen">
+  <h1>Pauza</h1>
+  <p>Igra je zaustavljena. Kad nastavite, igrica kreće iz početka ovog kruga.</p>
+  <div class="btns">
+    <button class="big" id="resumeBtn">Nastavi</button>
+    <button class="big sec" id="restartBtn">Nova igra</button>
+    <a class="big sec" href="../" style="text-decoration:none">Sve igrice</a>
+  </div>
 </div>
 
 <script>
@@ -637,6 +668,7 @@ function startMatch() {
   scores = [0, 0]; updateScores(); deck = shuffle([...GAMES]); gameNo = 0;
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('winScreen').classList.add('hidden');
+  document.getElementById('pauseScreen').classList.add('hidden'); pausedFrom = null;
   resize(); nextRound();
 }
 
@@ -646,14 +678,14 @@ function nextRound() {
   hitsInGame = 0; roundsDone = 0; clicksInGame = 0;
   setHints(game.hint);
   phase = 'intro'; introUntil = performance.now() + INTRO_MS;
-  skipBtn.classList.remove('hidden');
+  skipBtn.classList.remove('hidden'); pauseBtn.classList.remove('hidden');
 }
 
 // Preskakanje trenutne igre – bez poena, odmah ide sledeća
 function skipRound() {
   if (phase !== 'intro' && phase !== 'play') return;
   phase = 'result'; resultText = 'Preskočeno ⏭'; resultColor = '#e2e8f0';
-  setTimeout(nextRound, 700);
+  setTimeout(() => { if (phase === 'result') nextRound(); }, 700);
 }
 
 function endRound(winner, now) {
@@ -680,7 +712,7 @@ function continueGame() {
 }
 
 function showFinal() {
-  phase = 'win'; skipBtn.classList.add('hidden');
+  phase = 'win'; skipBtn.classList.add('hidden'); pauseBtn.classList.add('hidden');
   const w = document.getElementById('winText');
   if (scores[0] === scores[1]) { w.textContent = '🤝 Nerešeno!'; w.style.color = '#e2e8f0'; }
   else {
@@ -721,6 +753,28 @@ const skipBtn = document.getElementById('skipBtn');
 skipBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); skipRound(); });
 document.getElementById('startBtn').onclick = startMatch;
 document.getElementById('againBtn').onclick = startMatch;
+
+// Pauza: zaustavlja igru; posle nastavka trenutna igrica kreće iz početka kruga (poeni ostaju)
+const pauseBtn = document.getElementById('pauseBtn');
+let pausedFrom = null;
+function pauseGame() {
+  if (phase !== 'intro' && phase !== 'play' && phase !== 'result') return;
+  pausedFrom = phase; phase = 'paused';
+  document.getElementById('pauseScreen').classList.remove('hidden');
+}
+function resumeGame() {
+  if (phase !== 'paused') return;
+  document.getElementById('pauseScreen').classList.add('hidden');
+  const from = pausedFrom; pausedFrom = null;
+  if (from === 'intro') { phase = 'intro'; introUntil = performance.now() + INTRO_MS; }
+  else continueGame();
+}
+pauseBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); pauseGame(); });
+document.getElementById('resumeBtn').onclick = resumeGame;
+document.getElementById('restartBtn').onclick = startMatch;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' || e.key.toLowerCase() === 'p') { if (phase === 'paused') resumeGame(); else pauseGame(); }
+});
 
 // Prelama tekst u više redova da stane u zadatu širinu
 function wrapLines(ctx, text, maxW) {
